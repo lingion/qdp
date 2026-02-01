@@ -151,22 +151,22 @@ qdp -r
 
 - 下载专辑（示例：24/96，使用 -q 指定画质代码）：
 ```bash
-qdp dl https://play.qobuz.com/album/qxjbxh1dc3xyb -q 7
+qdp https://play.qobuz.com/album/qxjbxh1dc3xyb -q 7
 ```
 
 - 下载多个 URL 到自定义目录：
 ```bash
-qdp dl https://play.qobuz.com/artist/2038380 https://play.qobuz.com/album/ip8qjy1m6dakc -o "Some pop from 2020"
+qdp https://play.qobuz.com/artist/2038380 https://play.qobuz.com/album/ip8qjy1m6dakc -o "Some pop from 2020"
 ```
 
 - 从文本文件批量下载（每行一个 URL）：
 ```bash
-qdp dl urls.txt
+qdp urls.txt
 ```
 
 - 下载歌单并嵌入封面：
 ```bash
-qdp dl https://play.qobuz.com/label/7526 --embed-art
+qdp https://play.qobuz.com/label/7526 --embed-art
 ```
 
 - 交互式搜索并限制结果数：
@@ -176,12 +176,12 @@ qdp -s "fka twigs magdalene" -l 10
 
 - 跳过数据库去重检查并强制下载：
 ```bash
-qdp dl <URL> --no-db
+qdp <URL> --no-db
 ```
 
 运行任一子命令的帮助：
 ```bash
-qdp dl --help
+qdp --help
 qdp fun --help
 qdp lucky --help
 ```
@@ -191,7 +191,7 @@ qdp lucky --help
 ## Usage（整体命令摘要）
 （命令行参数以仓库内实现为准）
 ```
-usage: qdp [-h] [-r] {fun,dl,lucky} ...
+usage: qdp [-h] [-r] {fun,lucky} ...
 
 The ultimate Qobuz music downloader.
 
@@ -206,7 +206,7 @@ commands:
 
   {fun,dl,lucky}
     fun           interactive mode
-    dl            input mode
+    <url>            input mode
     lucky         lucky mode
 ```
 
