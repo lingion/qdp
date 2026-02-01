@@ -1,0 +1,5 @@
+pathvalidate
+requests
+mutagen
+beautifulsoup4
+rich

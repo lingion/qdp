@@ -1,0 +1,50 @@
+import logging
+import sqlite3
+
+from qobuz_dl.color import YELLOW, RED
+
+logger = logging.getLogger(__name__)
+
+
+def create_db(db_path):
+    with sqlite3.connect(db_path) as conn:
+        try:
+            conn.execute("CREATE TABLE downloads (id TEXT UNIQUE NOT NULL);")
+            logger.info(f"{YELLOW}Download-IDs database created")
+        except sqlite3.OperationalError:
+            pass
+        return db_path
+
+
+def handle_download_id(db_path, item_id, add_id=False):
+    if not db_path:
+        return
+
+    with sqlite3.connect(db_path) as conn:
+        if add_id:
+            try:
+                # 使用 INSERT OR IGNORE 避免重复插入报错
+                conn.execute(
+                    "INSERT OR IGNORE INTO downloads (id) VALUES (?)",
+                    (item_id,),
+                )
+                conn.commit()
+            except sqlite3.Error as e:
+                logger.error(f"{RED}Unexpected DB error: {e}")
+        else:
+            return conn.execute(
+                "SELECT id FROM downloads where id=?",
+                (item_id,),
+            ).fetchone()
+
+def remove_download_id(db_path, item_id):
+    """从数据库中删除指定 ID (用于本地文件缺失时重置状态)"""
+    if not db_path:
+        return
+    
+    with sqlite3.connect(db_path) as conn:
+        try:
+            conn.execute("DELETE FROM downloads WHERE id=?", (item_id,))
+            conn.commit()
+        except sqlite3.Error:
+            pass

@@ -1,0 +1,2 @@
+[console_scripts]
+qdp = qobuz_dl:main
