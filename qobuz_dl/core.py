@@ -21,15 +21,15 @@ logger = logging.getLogger(__name__)
 
 QUALITIES = {5: "5 - MP3", 6: "6 - 16 bit, 44.1kHz", 7: "7 - 24 bit, <96kHz", 27: "27 - 24 bit, >96kHz"}
 
-# 莫兰迪配色 (全局一致)
-C_TEXT   = "#abb2bf" # 灰白
-C_TITLE  = "#c678dd" # 淡紫
-C_ARTIST = "#98c379" # 淡绿
-C_INDEX  = "#61afef" # 淡蓝
-C_MAIN   = "#61afef" # 主色
-C_WARN   = "#e5c07b" # 淡黄
-C_ERR    = "#e06c75" # 淡红
-C_DIM    = "#5c6370" # 深灰
+# 莫兰迪优化方案 (Morandi Refined)
+C_TEXT   = "#9ca3af" # 烟灰 (更具质感的灰，降低视觉疲劳)
+C_TITLE  = "#a78bfa" # 丁香紫 (低饱和紫，优雅而不刺眼)
+C_ARTIST = "#a3b18a" # 鼠尾草绿 (经典的莫兰迪色调，柔和自然)
+C_INDEX  = "#8e9aaf" # 雾霾蓝 (冷色调中加入了高级灰)
+C_MAIN   = "#778da9" # 灰蓝 (核心主色，沉稳且具有通透感)
+C_WARN   = "#e9c46a" # 杏黄 (去掉了高亮刺眼感，像午后阳光)
+C_ERR    = "#e5989b" # 暮色粉 (用灰粉代替纯红，保持警示但不突兀)
+C_DIM    = "#6b705c" # 橄榄灰 (带有暖意深灰，增加画面深度)
 
 class QobuzDL:
     def __init__(self, directory="Qobuz Downloads", quality=6, embed_art=False, ignore_singles_eps=False, no_m3u_for_playlists=False, quality_fallback=True, cover_og_quality=False, no_cover=False, downloads_db=None, folder_format="{artist} - {album} ({year})", track_format="{tracknumber}. {tracktitle}", smart_discography=False, no_booklet=False):
