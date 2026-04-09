@@ -151,3 +151,11 @@ Restore instructions are documented in `docs/backup-and-restore.md`.
 - Product spec: `docs/PRD.md`
 - Backup strategy: `docs/backup-and-restore.md`
 - Definition of done: `docs/definition-of-done.md`
+
+
+## Webapp Maintenance
+
+The web-facing layer now has a dedicated maintenance note:
+- `docs/webapp-maintenance.md`
+
+This area is mainly aligned with Kerry's contribution scope: web UI, browser interaction, and frontend-facing maintainability.
