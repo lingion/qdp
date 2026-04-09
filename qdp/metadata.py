@@ -86,8 +86,8 @@ def _embed_flac_img(root_dir, audio: FLAC, final_name):
         with open(cover_image, "rb") as img:
             image.data = img.read()
         audio.add_picture(image)
-    except:
-        pass
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning("FLAC 封面嵌入失败: %s", exc)
 
 def _embed_id3_img(root_dir, audio: id3.ID3, final_name):
     cover_image = _find_cover(root_dir, final_name)
@@ -97,8 +97,28 @@ def _embed_id3_img(root_dir, audio: id3.ID3, final_name):
     try:
         with open(cover_image, "rb") as cover:
             audio.add(id3.APIC(3, "image/jpeg", 3, "", cover.read()))
-    except:
-        pass
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning("ID3 封面嵌入失败: %s", exc)
+
+def _quality_str(meta: dict) -> str:
+    if not meta:
+        return ""
+    q = meta.get("_actual_quality") or {}
+    code = q.get("quality_code")
+    bd = q.get("bit_depth")
+    sr = q.get("sampling_rate")
+    parts = []
+    if code is not None:
+        parts.append(f"code={code}")
+    if bd:
+        parts.append(f"bd={bd}")
+    if sr:
+        parts.append(f"sr={sr}")
+    reason = meta.get("_fallback_reason")
+    if reason:
+        parts.append(f"reason={reason}")
+    return ",".join(parts)
+
 
 def tag_flac(filename, root_dir, final_name, d: dict, album, istrack=True, em_image=False):
     """给 FLAC 文件写入标签"""
@@ -106,12 +126,12 @@ def tag_flac(filename, root_dir, final_name, d: dict, album, istrack=True, em_im
         audio = FLAC(filename)
         audio["TITLE"] = _get_title(d)
         audio["TRACKNUMBER"] = str(d.get("track_number", 0))
-        if "Disc " in final_name:
+        if int(d.get("media_number", 1) or 1) > 1:
             audio["DISCNUMBER"] = str(d.get("media_number", 1))
-        
+
         artist_ = d.get("performer", {}).get("name")
         curr_album = d.get("album", album)
-        
+
         audio["ARTIST"] = artist_ or curr_album["artist"]["name"]
         audio["ALBUMARTIST"] = curr_album["artist"]["name"]
         audio["ALBUM"] = curr_album["title"]
@@ -119,6 +139,11 @@ def tag_flac(filename, root_dir, final_name, d: dict, album, istrack=True, em_im
         audio["DATE"] = curr_album.get("release_date_original", "")
         audio["LABEL"] = curr_album.get("label", {}).get("name", "n/a")
         audio["COPYRIGHT"] = _format_copyright(curr_album.get("copyright") or "n/a")
+
+        # Persist actual downloaded quality info in tags.
+        quality_payload = _quality_str(d)
+        if quality_payload:
+            audio["QDP_QUALITY"] = quality_payload
 
         if em_image:
             _embed_flac_img(root_dir, audio, final_name)
@@ -155,9 +180,14 @@ def tag_mp3(filename, root_dir, final_name, d, album, istrack=True, em_image=Fal
                 id3tag = ID3_LEGEND[k]
                 audio[id3tag.__name__] = id3tag(encoding=3, text=v)
 
+        # Persist actual downloaded quality in a custom TXXX frame.
+        quality_payload = _quality_str(d)
+        if quality_payload:
+            audio.add(id3.TXXX(encoding=3, desc="QDP_QUALITY", text=quality_payload))
+
         if em_image:
             _embed_id3_img(root_dir, audio, final_name)
 
         audio.save(filename, "v2_version=3")
     except Exception as e:
-         logger.error(f"MP3 标签写入失败: {e}")
+        logger.error(f"MP3 标签写入失败: {e}")
