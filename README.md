@@ -169,3 +169,9 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 ### Webapp Preview
 
 ![qdp webapp preview](docs/screenshots/webapp-home.jpg)
+
+
+## Maintained By
+
+- **Lingion**: mainline integration, infrastructure, deployment, and repository quality
+- **Kerry1020**: webapp, UI, browser-side behavior, and frontend-facing maintenance
