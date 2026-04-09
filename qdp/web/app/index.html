@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>qdp Web Player</title>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="stylesheet" href="/app/app.css?v=__QDP_WEB_VERSION__" />
+</head>
+<body>
+  <div id="app">
+    <div class="appShell">
+      <header class="topbar">
+        <div class="topbarMain topbarMinimal">
+          <div class="brandWrap brandWrapCentered">
+            <div class="brandMark">Q</div>
+            <div class="brandTextCenter">
+              <div class="brand">qdp</div>
+              <div id="appVersion" class="appVersion">v…</div>
+            </div>
+          </div>
+
+          <div class="searchPanel searchPanelMinimal">
+            <div class="search">
+              <input id="q" type="search" placeholder="Search tracks / albums / artists / playlists or paste Qobuz URL" autocomplete="off" />
+              <label class="urlbox"><input id="urlMode" type="checkbox" /> URL</label>
+              <button id="go">Search</button>
+            </div>
+          </div>
+
+          <div class="topbarMetaMinimal">
+            <div class="accountInlineWrap">
+              <select id="accountSelect" class="accountSelect">
+                <option value="">Loading accounts…</option>
+              </select>
+            </div>
+            <div id="me" class="me">…</div>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="main">
+          <section class="contentBoard contentBoardPrimary">
+            <div class="boardTopRow">
+              <div class="toolbarIntro toolbarIntroCompact">
+                <div class="panelEyebrow">Content View</div>
+                <div class="toolbarTitle">结果中心</div>
+              </div>
+              <div class="boardTopActions">
+                <button id="mobileSidebarToggle" class="btn small mobileSidebarToggle" aria-expanded="false">Queue / Playlists</button>
+                <button id="backTop" class="btn small hidden">Back</button>
+              </div>
+            </div>
+            <div class="toolbarRow boardToolbar">
+              <div class="tabs" id="typeTabs">
+                <button class="tab active" data-type="tracks">Tracks</button>
+                <button class="tab" data-type="albums">Albums</button>
+                <button class="tab" data-type="artists">Artists</button>
+                <button class="tab" data-type="playlists">Playlists</button>
+              </div>
+            </div>
+
+            <section id="results" class="results">
+              <div class="empty">Search something.</div>
+            </section>
+          </section>
+        </section>
+
+        <aside class="sidebar" id="sidebar">
+          <div class="mobileSidebarHead">
+            <div class="mobileSidebarTabs" role="tablist" aria-label="Queue and playlists">
+              <button id="mobileTabQueue" class="mobileSidebarTab active" data-mobile-tab="queue" aria-selected="true">Queue</button>
+              <button id="mobileTabPlaylists" class="mobileSidebarTab" data-mobile-tab="playlists" aria-selected="false">Playlists</button>
+            </div>
+            <button id="mobileSidebarClose" class="btn small mobileSidebarClose" aria-label="Close panel">Done</button>
+          </div>
+
+          <div class="sideCard sidePanel sidePanelQueue" data-side-panel="queue">
+            <div class="sideHeader">
+              <div class="sideTitleWrap"><button id="queueSectionToggle" class="sectionToggle active" type="button" aria-expanded="true"><span class="sideTitle">Queue</span><span class="sectionChevron" aria-hidden="true">⌄</span></button><div id="queueSourceBadge" class="sourceBadge hidden"></div></div>
+              <div class="sideActions">
+                <button id="shuffle" class="btn small iconBtn" title="Shuffle">
+                  <span class="icon" data-icon="shuffle"></span>
+                </button>
+                <button id="newPlaylist" class="btn small">+ Playlist</button>
+              </div>
+            </div>
+            <div id="queue" class="queue sectionBody emptyMini">No queue yet.</div>
+          </div>
+
+          <div class="sideCard sidePanel sidePanelPlaylists" data-side-panel="playlists">
+            <div class="sideHeader">
+              <button id="playlistsSectionToggle" class="sectionToggle" type="button" aria-expanded="false"><span class="sideTitle">My Playlists</span><span class="sectionChevron" aria-hidden="true">⌄</span></button>
+              <div class="sideActions playlistTools">
+                <button id="importPlaylists" class="btn small">Import JSON</button>
+                <button id="exportAllPlaylists" class="btn small">Export All</button>
+                <input id="playlistImportInput" class="fileInput" type="file" accept="application/json,.json" />
+              </div>
+            </div>
+            <div id="myPlaylists" class="playlists sectionBody collapsed emptyMini">No playlists yet.</div>
+          </div>
+        </aside>
+        <div id="mobileSidebarOverlay" class="mobileSidebarOverlay" aria-hidden="true"></div>
+      </main>
+    </div>
+
+    <footer class="player playerMinimal" id="player">
+      <div class="now nowCentered">
+        <img id="cover" class="cover" alt="" />
+        <div class="meta">
+          <div class="titleRow">
+            <div id="title" class="title">—</div>
+          </div>
+          <div class="subRow">
+            <div id="subtitle" class="subtitle">—</div>
+            <div id="nowSourcePill" class="sourcePill hidden"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="transportRow">
+          <button id="prev" class="btn iconBtn" title="Previous"><span class="icon" data-icon="prev"></span></button>
+          <button id="play" class="btn iconBtn primary" title="Play / Pause"><span class="icon" data-icon="play"></span></button>
+          <button id="next" class="btn iconBtn" title="Next"><span class="icon" data-icon="next"></span></button>
+          <button id="shuffleMain" class="btn iconBtn" title="Shuffle mode"><span class="icon" data-icon="shuffle"></span></button>
+          <div class="volumeDockWrap">
+            <button id="mute" class="btn iconBtn" title="Volume"><span class="icon" data-icon="volume"></span></button>
+            <div id="volumePopover" class="volumePopover hidden" aria-hidden="true">
+              <div class="volumePopoverInner">
+                <button id="volumeMuteToggle" class="btn small volumeMuteToggle" type="button">静音</button>
+                <div class="volumeRail">
+                  <input id="volume" class="volumeSliderVertical" type="range" min="0" max="100" value="100" aria-label="Volume" />
+                  <div id="volumeValue" class="volumeValue">100%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <label class="pill qualityPill">Q
+            <select id="qualitySelect" class="qualitySelect">
+              <option value="5">MP3</option>
+              <option value="6">FLAC</option>
+              <option value="7">Hi-Res 96k</option>
+              <option value="27">MAX</option>
+            </select>
+          </label>
+        </div>
+        <div class="progressBlock">
+          <div class="progress">
+            <input id="seek" type="range" min="0" max="1000" value="0" />
+          </div>
+          <div class="playerInfoRow">
+            <div class="time"><span id="tcur">0:00</span> / <span id="tdur">0:00</span></div>
+            <div class="statusStack">
+              <div id="qualitySwitchBadge" class="qualitySwitchBadge hidden" aria-live="polite"></div>
+              <div id="playerStatus" class="playerStatus">Idle</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <audio id="audio" preload="metadata"></audio>
+    </footer>
+  </div>
+
+  <div id="downloadMenu" class="downloadMenu hidden" aria-hidden="true">
+    <div class="downloadMenuBackdrop"></div>
+    <div id="downloadMenuCard" class="downloadMenuCard" role="menu" aria-label="选择下载音质"></div>
+  </div>
+
+  <script src="/app/core.js?v=__QDP_WEB_VERSION__"></script>
+  <script src="/app/accounts.js?v=__QDP_WEB_VERSION__"></script>
+  <script src="/app/queue.js?v=__QDP_WEB_VERSION__"></script>
+  <script src="/app/playlists.js?v=__QDP_WEB_VERSION__"></script>
+  <script src="/app/api.js?v=__QDP_WEB_VERSION__"></script>
+  <script src="/app/discover.js?v=__QDP_WEB_VERSION__"></script>
+  <script src="/app/player.js?v=__QDP_WEB_VERSION__"></script>
+  <script src="/app/app.js?v=__QDP_WEB_VERSION__"></script>
+</body>
+</html>
+dy>
+</html>
