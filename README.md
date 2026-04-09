@@ -256,3 +256,13 @@ qobuz.handle_url("https://play.qobuz.com/album/va4j3hdlwaubc")
 
 ## License
 请参阅仓库中的 LICENSE 文件以获取许可信息。
+
+
+## Webapp Demo
+
+- Live demo: https://master.qdp-webapp-demo.pages.dev
+- Deployment URL: https://8685d694.qdp-webapp-demo.pages.dev
+
+### Webapp Preview
+
+![qdp webapp preview](docs/screenshots/webapp-home.jpg)
