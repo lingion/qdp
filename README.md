@@ -159,3 +159,13 @@ The web-facing layer now has a dedicated maintenance note:
 - `docs/webapp-maintenance.md`
 
 This area is mainly aligned with Kerry's contribution scope: web UI, browser interaction, and frontend-facing maintainability.
+
+
+## Webapp Demo
+
+- Live demo: https://master.qdp-webapp-demo.pages.dev
+- Deployment URL: https://8685d694.qdp-webapp-demo.pages.dev
+
+### Webapp Preview
+
+![qdp webapp preview](docs/screenshots/webapp-home.jpg)
