@@ -1,5 +1,7 @@
 // Split from legacy app.js for lower-risk browser-native loading.
 
+// ═══ Keyboard Helpers ═══
+
 function shouldIgnoreSpaceToggle(target){
   if(!target) return false;
   const tag = String(target.tagName || '').toLowerCase();
@@ -7,16 +9,45 @@ function shouldIgnoreSpaceToggle(target){
   if(target.isContentEditable) return true;
   return false;
 }
+// ═══ Mobile Layout ═══
+
 function isMobileLayout(){
   return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
 }
+// Intentional file-scoped global: used across bindUI() and keyboard/click handlers in this file
+let mobileSettingsOpen = false;
+function setMobileSettingsOpen(open){
+  mobileSettingsOpen = !!open;
+  const meta = document.querySelector('.topbarMetaInline');
+  const backdrop = $('mobileSettingsBackdrop');
+  if(meta) meta.classList.toggle('mobileSettingsOpen', mobileSettingsOpen);
+  if(backdrop){
+    backdrop.classList.toggle('open', mobileSettingsOpen);
+    backdrop.setAttribute('aria-hidden', String(!mobileSettingsOpen));
+  }
+  if(mobileSettingsOpen){
+    const mq = $('qualitySelectMobile');
+    if(mq) mq.value = String(currentQuality());
+    const mv = $('appVersionMobile');
+    if(mv) mv.textContent = appVersionText();
+    loadCacheStats();
+  }
+}
+function toggleMobileSettings(force){
+  setMobileSettingsOpen(typeof force === 'boolean' ? force : !mobileSettingsOpen);
+}
+// ═══ App Version ═══
+
 function appVersionText(){
   const version = runtimeVersion || APP_VERSION;
   return version ? `v${version}` : `v${APP_VERSION_LOADING}`;
 }
 function syncAppVersion(){
+  const text = appVersionText();
   const node = $('appVersion');
-  if(node) node.textContent = appVersionText();
+  if(node) node.textContent = text;
+  const mobile = $('appVersionMobile');
+  if(mobile) mobile.textContent = text;
 }
 async function loadMeta(){
   const meta = await api('/api/meta');
@@ -24,6 +55,8 @@ async function loadMeta(){
   syncAppVersion();
   return meta;
 }
+// ═══ Mobile Sidebar ═══
+
 function setMobileSidebarTab(tab){
   const nextTab = tab === 'playlists' ? 'playlists' : 'queue';
   state.mobileSidebarTab = nextTab;
@@ -97,6 +130,8 @@ function onMobileDrawerTouchEnd(e){
     setMobileSidebarOpen(true);
   }
 }
+// ═══ Viewport ═══
+
 function setMobileSidebarOpen(open){
   state.mobileSidebarOpen = !!open;
   const sidebar = $('sidebar');
@@ -109,16 +144,25 @@ function setMobileSidebarOpen(open){
   document.body.classList.toggle('mobileSidebarOpen', mobileOpen);
   if(!mobileOpen) resetMobileDrawerTouch();
 }
+// ═══ UI Bindings ═══
+
 function handleViewportChange(){
   const mobile = isMobileLayout();
   document.body.classList.toggle('mobileLayout', mobile);
   document.body.classList.toggle('mobileSidebarOpen', mobile && state.mobileSidebarOpen);
   if(!mobile) setMobileSidebarOpen(false);
+  if(!mobile) setMobileSettingsOpen(false);
   setMobileSidebarTab(state.mobileSidebarTab);
   syncSidebarSections();
   if(!mobile) setVolumePopoverOpen(false);
+  else setVolumePopoverOpen(true);
   document.documentElement.style.setProperty('--app-height', `${window.innerHeight || document.documentElement.clientHeight || 0}px`);
 }
+function setDesktopSearchFocus(open){
+  if(isMobileLayout()) return;
+  document.body.classList.toggle('searchFocusedDesktop', !!open);
+}
+
 function bindUI(){
   document.querySelectorAll('.tab').forEach((b)=>{
     b.addEventListener('click', ()=>{
@@ -127,20 +171,114 @@ function bindUI(){
     });
   });
 
-  $('go').addEventListener('click', ()=>search().catch((e)=>renderEmpty(`Error: ${e.message}`)));
+  $('go').addEventListener('click', ()=>{
+    const q = ($('q').value || '').trim();
+    if(q){
+      search().catch((e)=>renderEmpty(`Error: ${e.message}`));
+    }else{
+      loadDiscoverRandom(true).catch((e)=>renderEmpty(`Error: ${e.message}`));
+    }
+  });
   $('q').addEventListener('keydown', (e)=>{ if(e.key==='Enter') search().catch((err)=>renderEmpty(`Error: ${err.message}`)); });
+
+  // Show/hide search type tabs and settings gear on input focus/blur
+  let _searchBlurTimer = 0;
+  $('q').addEventListener('focus', ()=>{
+    clearTimeout(_searchBlurTimer);
+    const tabs = $('searchTypeTabs');
+    const gear = $('mobileSettingsBtn');
+    if(tabs) tabs.classList.remove('hidden');
+    if(gear) gear.classList.remove('hidden');
+    setDesktopSearchFocus(true);
+  });
+  $('q').addEventListener('blur', ()=>{
+    _searchBlurTimer = setTimeout(()=>{
+      const tabs = $('searchTypeTabs');
+      const gear = $('mobileSettingsBtn');
+      if(tabs) tabs.classList.add('hidden');
+      if(gear) gear.classList.add('hidden');
+      setDesktopSearchFocus(false);
+    }, 200);
+  });
+
+  // Search type tabs: focus-aware visibility
+  const searchTypeTabs = $('searchTypeTabs');
+  function updateGoButton(){
+    const q = ($('q').value || '').trim();
+    const goBtn = $('go');
+    goBtn.textContent = q ? '搜索' : '发现';
+    goBtn.classList.toggle('primary', !!q);
+  }
+  $('q').addEventListener('input', updateGoButton);
+  if(searchTypeTabs){
+    searchTypeTabs.addEventListener('mousedown', (e)=>{ e.preventDefault(); });
+  }
+  updateGoButton();
   document.addEventListener('keydown', (e)=>{
     if(!e || e.defaultPrevented) return;
+    const key = e.key;
+
+    // Ctrl/Cmd+F: focus search input (always active, prevents browser find dialog)
+    if(key === 'f' && (e.metaKey || e.ctrlKey)){
+      e.preventDefault();
+      $('q').focus();
+      return;
+    }
+
+    // Space: toggle play/pause (works on both mobile and desktop)
+    if(key === ' ' || e.code === 'Space'){
+      if(shouldIgnoreSpaceToggle(e.target)) return;
+      e.preventDefault();
+      togglePlay().catch((err)=>console.error('space toggle failed', err));
+      return;
+    }
+
+    // Below shortcuts only on desktop layout
     if(isMobileLayout()) return;
-    if(e.key !== ' ' && e.code !== 'Space') return;
-    if(shouldIgnoreSpaceToggle(e.target)) return;
-    e.preventDefault();
-    togglePlay().catch((err)=>console.error('space toggle failed', err));
+
+    // Arrow keys: prev/next track (not when input/textarea/select/contentEditable is focused,
+    // and not when a range input like seek bar or volume slider is focused)
+    if(key === 'ArrowLeft'){
+      if(shouldIgnoreSpaceToggle(e.target)) return;
+      prev();
+      return;
+    }
+    if(key === 'ArrowRight'){
+      if(shouldIgnoreSpaceToggle(e.target)) return;
+      next();
+      return;
+    }
+    // R key: toggle repeat mode
+    if(key === 'r'){
+      if(shouldIgnoreSpaceToggle(e.target)) return;
+      toggleRepeatMode();
+      return;
+    }
   });
   $('backTop').addEventListener('click', goBack);
+  const dockMenuBtn = $('dockMenuBtn');
+  if(dockMenuBtn) dockMenuBtn.addEventListener('click', ()=>{
+    if(isMobileLayout()){
+      setMobileSidebarOpen(!state.mobileSidebarOpen);
+    }
+  });
   $('mobileSidebarToggle').addEventListener('click', ()=>setMobileSidebarOpen(!state.mobileSidebarOpen));
   $('mobileSidebarClose').addEventListener('click', ()=>setMobileSidebarOpen(false));
   $('mobileSidebarOverlay').addEventListener('click', ()=>setMobileSidebarOpen(false));
+  $('mobileSettingsBtn').addEventListener('click', ()=>toggleMobileSettings());
+  $('mobileSettingsBackdrop').addEventListener('click', ()=>setMobileSettingsOpen(false));
+  $('qualitySelectMobile').addEventListener('change', ()=>{
+    const val = Number($('qualitySelectMobile').value || 5);
+    const mainSelect = $('qualitySelect');
+    if(mainSelect){
+      mainSelect.value = String(val);
+      mainSelect.dispatchEvent(new Event('change'));
+    }
+  });
+  $('qualitySelect').addEventListener('change', ()=>{
+    const mq = $('qualitySelectMobile');
+    if(mq) mq.value = String(currentQuality());
+  });
   const sidebar = $('sidebar');
   sidebar.addEventListener('touchstart', onMobileDrawerTouchStart, { passive: true });
   sidebar.addEventListener('touchmove', onMobileDrawerTouchMove, { passive: false });
@@ -150,13 +288,29 @@ function bindUI(){
   $('mobileTabPlaylists').addEventListener('click', ()=>setMobileSidebarTab('playlists'));
   $('queueSectionToggle').addEventListener('click', ()=>toggleSidebarSection('queue'));
   $('playlistsSectionToggle').addEventListener('click', ()=>toggleSidebarSection('playlists'));
-  window.addEventListener('resize', handleViewportChange);
+  let _resizeTimer = 0;
+  const debouncedResize = ()=> {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(()=>{
+      handleViewportChange();
+      if(state.downloadMenu.open) positionDownloadMenu(state.downloadMenu.anchorRect);
+    }, 80);
+  };
+  window.addEventListener('resize', debouncedResize);
 
   $('play').addEventListener('click', ()=>togglePlay());
   $('prev').addEventListener('click', ()=>prev());
   $('next').addEventListener('click', ()=>next());
+  $('playQueue').addEventListener('click', async ()=>{
+    if(!state.queue.length) return;
+    if(state.idx < 0) state.idx = 0;
+    try{ await playCurrent('play-queue-btn'); }catch(_e){ console.error('playQueue failed', _e); }
+  });
   $('shuffle').addEventListener('click', ()=>{ toggleShuffleMode(); shuffleQueueNow(); });
   $('shuffleMain').addEventListener('click', toggleShuffleMode);
+  $('repeat').addEventListener('click', toggleRepeatMode);
+  $('repeatMain').addEventListener('click', toggleRepeatMode);
+  $('clearQueue').addEventListener('click', ()=>clearQueue());
   $('mute').addEventListener('click', (e)=>{ e.stopPropagation(); toggleVolumePopover(); });
   $('volumeMuteToggle').addEventListener('click', (e)=>{ e.stopPropagation(); toggleMute(); });
   $('volume').addEventListener('input', (e)=>setVolume(Number(e.target.value || 0) / 100));
@@ -169,6 +323,7 @@ function bindUI(){
     state.streamCache = {};
     saveCacheMap(STREAM_CACHE_KEY, state.streamCache);
     state.prefetchedStreamIds.clear();
+    clearPendingStreams();
     if($('audio')?.src && state.idx >= 0){
       await swapCurrentTrackQuality(nextQuality);
       return;
@@ -192,14 +347,20 @@ function bindUI(){
     if(!file) return;
     try{
       await importPlaylistsFromFile(file, { mode: 'merge' });
-      alert('Playlists imported.');
+      showToast('歌单已导入', 'success');
     }catch(err){
-      alert(`导入失败：${err.message}`);
+      showToast(`导入失败：${err.message}`, 'error');
     }finally{
       e.target.value = '';
     }
   });
   $('accountSelect').addEventListener('change', (e)=>switchAccount(e.target.value));
+  $('clearCacheAudio').addEventListener('click', ()=>clearCacheByType('audio'));
+  $('clearCacheAll').addEventListener('click', async ()=>{
+    const confirmed = await showConfirmModal('清除缓存', '确认清除全部缓存？此操作不可撤销。', '清除', '取消');
+    if(!confirmed) return;
+    clearCacheByType('all');
+  });
 
   const downloadMenu = $('downloadMenu');
   if(downloadMenu){
@@ -207,18 +368,52 @@ function bindUI(){
       if(e.target === downloadMenu) closeDownloadMenu();
     });
   }
+
+  // Download modal bindings
+  const downloadModalConfirmBtn = $('downloadModalConfirmBtn');
+  if(downloadModalConfirmBtn) downloadModalConfirmBtn.addEventListener('click', ()=>confirmDownloadModal());
+  const downloadModalCancelBtn = $('downloadModalCancelBtn');
+  if(downloadModalCancelBtn) downloadModalCancelBtn.addEventListener('click', ()=>cancelDownloadModal());
+  const downloadModalBrowseBtn = $('downloadModalBrowseBtn');
+  if(downloadModalBrowseBtn) downloadModalBrowseBtn.addEventListener('click', ()=>openBrowseDirModal());
+  const downloadModalBackdrop = document.querySelector('#downloadModal .downloadModalBackdrop');
+  if(downloadModalBackdrop) downloadModalBackdrop.addEventListener('click', ()=>cancelDownloadModal());
+
+  // Browse directory sub-dialog bindings
+  const browseDirConfirmBtn = $('browseDirConfirmBtn');
+  if(browseDirConfirmBtn) browseDirConfirmBtn.addEventListener('click', ()=>confirmBrowseDir());
+  const browseDirCancelBtn = $('browseDirCancelBtn');
+  if(browseDirCancelBtn) browseDirCancelBtn.addEventListener('click', ()=>cancelBrowseDir());
+  const browseDirBackdrop = document.querySelector('#browseDirModal .browseDirBackdrop');
+  if(browseDirBackdrop) browseDirBackdrop.addEventListener('click', ()=>cancelBrowseDir());
   document.addEventListener('keydown', (e)=>{
-    if(e.key === 'Escape' && state.downloadMenu.open){
+    if(e.key !== 'Escape') return;
+    let handled = false;
+    // Close browse dir sub-dialog first if open
+    const browseDirModal = $('browseDirModal');
+    if(browseDirModal && !browseDirModal.classList.contains('hidden')){
+      cancelBrowseDir();
+      handled = true;
+    } else if(state.downloadMenu.open || _downloadModalState.open){
       closeDownloadMenu();
+      handled = true;
     }
-    if(e.key === 'Escape' && state.volumePopoverOpen){
-      setVolumePopoverOpen(false);
-    }
+    if(state.volumePopoverOpen){ setVolumePopoverOpen(false); handled = true; }
+    if(mobileSettingsOpen){ setMobileSettingsOpen(false); handled = true; }
+    if(!handled && state.history.length > 0 && document.activeElement === document.body) goBack();
   });
   document.addEventListener('click', (e)=>{
     if(state.volumePopoverOpen){
       const volumeWrap = e.target.closest('.volumeDockWrap');
       if(!volumeWrap) setVolumePopoverOpen(false);
+    }
+    if(mobileSettingsOpen){
+      const settingsBtn = e.target.closest('#mobileSettingsBtn');
+      const settingsPanel = e.target.closest('.topbarMetaInline');
+      const settingsBackdrop = e.target.closest('.mobileSettingsBackdrop');
+      if(!settingsBtn && !settingsPanel && !settingsBackdrop){
+        setMobileSettingsOpen(false);
+      }
     }
     if(!state.downloadMenu.open) return;
     const card = $('downloadMenuCard');
@@ -227,16 +422,36 @@ function bindUI(){
     if(trigger && trigger.querySelector?.('[data-icon="download"]')) return;
     closeDownloadMenu();
   });
-  window.addEventListener('resize', ()=>{
-    if(state.downloadMenu.open){
-      state.downloadMenu.mobile = isMobileLayout();
-      $('downloadMenu')?.classList.toggle('mobileSheet', state.downloadMenu.mobile);
-      buildDownloadMenuContent(state.downloadMenu.track, state.downloadMenu.mobile);
-      positionDownloadMenu(state.downloadMenu.anchorRect);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState !== 'visible') return;
+    if(!state.playing || state.idx < 0) return;
+    const currentTrack = normTrack(state.queue[state.idx]);
+    if(!currentTrack?.id) return;
+    const audio = $('audio');
+    if(!audio) return;
+    const staleKey = `${currentTrack.id}:${currentQuality()}`;
+    if(streamCacheAge(staleKey) >= STREAM_STALE_MS){
+      console.debug('[visibilitychange] stream stale, refreshing');
+      const currentTime = audio.currentTime;
+      getTrackStream(currentTrack.id, currentQuality()).then((freshStream)=>{
+        if(!freshStream?.url) return;
+        if(!state.playing || normTrack(state.queue[state.idx])?.id !== currentTrack.id) return;
+        audio.src = freshStream.url;
+        audio.addEventListener('loadedmetadata', ()=>{ audio.currentTime = currentTime; }, { once: true });
+      }).catch((_err)=>{});
     }
+  });
+
+  document.addEventListener('pointerdown', (e)=>{
+    if(isMobileLayout()) return;
+    const inSearch = e.target && e.target.closest && e.target.closest('.topbarSearchPanel');
+    if(!inSearch) setDesktopSearchFocus(false);
   });
 }
 
+// ═══ Test Hooks ═══
+
+if(new URLSearchParams(location.search).has('debug') || localStorage.getItem('qdp.debug') === '1'){
 window.__qdpTestHooks = {
   createPlaylistRecord,
   choosePlaylistForTracks,
@@ -262,6 +477,8 @@ window.__qdpTestHooks = {
   closeDownloadMenu,
   reorderQueueItems,
   commitQueueReorder,
+  removeQueueItem,
+  clearQueue,
   exportPlaylistById,
   shouldIgnoreSpaceToggle,
   isMobileLayout,
@@ -296,15 +513,29 @@ window.__qdpTestHooks = {
   __next: next,
   __prev: prev,
   __nextIndex: nextIndex,
+  toggleRepeatMode,
+  syncRepeatUi,
+  showToast,
 };
+}
+
+// ═══ Bootstrap ═══
 
 async function main(){
+  /* Ensure volume is never stuck at 0 / muted on launch (physical volume button may be broken) */
+  if(state.muted || state.volume <= 0){
+    state.muted = false;
+    state.volume = state.lastNonZeroVolume || 1;
+    persistVolumeState();
+  }
+  applyVolumeToAudio();
+  syncVolumeUi();
   syncAppVersion();
   bindUI();
   bindPlayer();
   syncSidebarSections();
   handleViewportChange();
-  $('go').textContent = 'Search';
+  $('go').textContent = '发现';
   restorePersistedPlayerSession({ render: false });
   renderQueue();
   renderPlaylists();
@@ -315,6 +546,9 @@ async function main(){
   }
   await loadAccounts();
   await loadMe();
+  loadCacheStats();
+  // Pre-load default download path so bulk downloads don't land in cwd
+  fetchDefaultDownloadPath().then((p)=>{ if(p) _downloadModalState.defaultPath = p; }).catch(()=>{});
   if(!state.queue.length && !($('q').value || '').trim()){
     await loadDiscoverRandom();
   }
