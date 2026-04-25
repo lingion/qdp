@@ -7,6 +7,7 @@ from datetime import date
 import requests
 
 from qdp.exceptions import (
+    AppSecretValidationProxyError,
     AuthenticationError,
     IneligibleError,
     InvalidAppIdError,
@@ -27,6 +28,7 @@ C_OK   = "#98c379"
 C_WARN = "#e5c07b"
 C_ERR  = "#e06c75"
 
+
 class Client:
     def __init__(self, email, pwd, app_id, secrets, use_token, user_id, user_auth_token):
         console.print(f"[{C_TEXT}]正在登录 API...[/{C_TEXT}]")
@@ -40,14 +42,65 @@ class Client:
                 "Content-Type": "application/json;charset=UTF-8"
             }
         )
-        
+
         # 初始化代理列表
         self.proxy_list = get_proxy_list()
         self.base = get_api_base_url()
-        
+
         self.sec = None
         self.auth(email, pwd, use_token, user_id, user_auth_token)
         self.cfg_setup()
+
+    @staticmethod
+    def _looks_like_proxy_validation_response(response):
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = None
+
+        if isinstance(payload, dict):
+            text = " ".join(str(value) for value in payload.values() if value is not None).lower()
+        else:
+            try:
+                text = response.text.lower()
+            except Exception:
+                text = ""
+
+        proxy_markers = (
+            "worker",
+            "proxy",
+            "forbidden",
+            "timeout",
+            "timed out",
+            "gateway",
+            "cloudflare",
+            "access denied",
+        )
+        return any(marker in text for marker in proxy_markers)
+
+    def _raise_secret_validation_failure(self, response, *, endpoint, proxy_display):
+        status = response.status_code
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = response.text
+
+        if status == 400 and not self._looks_like_proxy_validation_response(response):
+            raise InvalidAppSecretError(f"API 签名错误 (App Secret 可能已失效): {payload}.\n" + RESET)
+
+        if status in (401, 403, 407, 429, 500, 502, 503, 504):
+            raise AppSecretValidationProxyError(
+                f"App Secret 校验请求被上游/代理拒绝或中断 ({endpoint}, HTTP {status}, via {proxy_display}): {payload}."
+            )
+
+        if 400 <= status < 500:
+            raise AppSecretValidationProxyError(
+                f"App Secret 校验未完成，返回了非签名类客户端错误 ({endpoint}, HTTP {status}, via {proxy_display}): {payload}."
+            )
+
+        raise AppSecretValidationProxyError(
+            f"App Secret 校验失败，疑似代理/网络/上游异常 ({endpoint}, HTTP {status}, via {proxy_display}): {payload}."
+        )
 
     def api_call(self, epoint, **kwargs):
         if epoint == "catalog/search":
@@ -105,18 +158,22 @@ class Client:
                     self.base = "https://www.qobuz.com/api.json/0.2/"
                 proxy_display = "Direct/Default"
             try:
-                r = self.session.get(self.base + epoint, params=params, timeout=10)
+                req_headers = {}
+                if current_proxy:
+                    req_headers["Origin"] = "https://www.qobuz.com"
+                    req_headers["Referer"] = "https://www.qobuz.com/"
+                r = self.session.get(self.base + epoint, params=params, headers=req_headers if req_headers else None, timeout=10)
                 if epoint == "user/login":
                     if r.status_code == 401:
                         raise AuthenticationError("登录失败：Token 无效或过期。\n" + RESET)
                     if r.status_code == 400:
                         raise InvalidAppIdError("API 错误：无效的 App ID。\n" + RESET)
                     console.print(f"[{C_OK}]登录成功！[/{C_OK}]")
-                elif epoint in ["track/getFileUrl", "favorite/getUserFavorites"] and r.status_code == 400:
-                    raise InvalidAppSecretError(f"API 签名错误 (App Secret 可能已失效): {r.json()}.\n" + RESET)
+                elif epoint in ["track/getFileUrl", "favorite/getUserFavorites"] and r.status_code >= 400:
+                    self._raise_secret_validation_failure(r, endpoint=epoint, proxy_display=proxy_display)
                 r.raise_for_status()
                 return r.json()
-            except (AuthenticationError, InvalidAppIdError, InvalidAppSecretError):
+            except (AuthenticationError, InvalidAppIdError, InvalidAppSecretError, AppSecretValidationProxyError):
                 raise
             except (requests.exceptions.ProxyError, requests.exceptions.SSLError) as e:
                 last_error = requests.exceptions.ProxyError(f"proxy failure via {proxy_display}: {e}")
@@ -131,7 +188,7 @@ class Client:
             except requests.exceptions.RequestException as e:
                 last_error = e
                 if current_proxy:
-                    console.print(f"[{C_WARN}]⚡ 节点 {proxy_display} 异常，切换下一节点... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
+                    console.print(f"[{C_WARN}]⚡ 节点异常，切换下一节点... ({i+1}/{len(attempt_queue)})[/{C_WARN}] {proxy_display}")
                 elif "search" not in epoint:
                     console.print(f"[{C_WARN}]请求失败，正在重试... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
             if i < len(attempt_queue) - 1:
@@ -156,8 +213,10 @@ class Client:
             try:
                 self.expiry_date = date.fromisoformat(sub["end_date"])
                 date_str = date.strftime(self.expiry_date, '%Y年%m月%d日')
-            except (ValueError, TypeError): date_str = "未知日期"
-        else: date_str = "无活跃订阅"
+            except (ValueError, TypeError):
+                date_str = "未知日期"
+        else:
+            date_str = "无活跃订阅"
         self.account_meta = {
             'label': self.label,
             'expiry_date': self.expiry_date.isoformat() if hasattr(self, 'expiry_date') else '',
@@ -165,7 +224,7 @@ class Client:
             'status': '可用',
             'status_detail': '',
         }
-        console.print(f"[{C_OK}]会员类型: {self.label} | 到期时间: {date_str}[/{C_OK}]")
+        console.print(f"[{C_OK}]会员类型:[/{C_OK}] {self.label} | 到期时间: {date_str}")
 
     def search(self, query, type, limit=10, offset=0):
         # 增加 offset 参数
@@ -183,35 +242,61 @@ class Client:
     def multi_meta(self, epoint, key, id, type):
         total = 1
         offset = 0
-        while total > 0:
-            if type in ["tracks", "albums"]: j = self.api_call(epoint, id=id, offset=offset, type=type)[type]
-            else: j = self.api_call(epoint, id=id, offset=offset, type=type)
+        max_iterations = 1000
+        for _ in range(max_iterations):
+            if total <= 0:
+                break
+            if type in ["tracks", "albums"]:
+                j = self.api_call(epoint, id=id, offset=offset, type=type)[type]
+            else:
+                j = self.api_call(epoint, id=id, offset=offset, type=type)
+            if not j or key not in j:
+                break
+            yield j
             if offset == 0:
-                yield j
                 total = j[key] - 500
             else:
-                yield j
                 total -= 500
             offset += 500
 
-    def get_album_meta(self, id): return self.api_call("album/get", id=id)
-    def get_track_meta(self, id): return self.api_call("track/get", id=id)
-    def get_track_url(self, id, fmt_id): return self.api_call("track/getFileUrl", id=id, fmt_id=fmt_id)
-    def get_artist_meta(self, id): return self.multi_meta("artist/get", "albums_count", id, None)
-    def get_plist_meta(self, id): return self.multi_meta("playlist/get", "tracks_count", id, None)
-    def get_label_meta(self, id): return self.multi_meta("label/get", "albums_count", id, None)
-    
+    def get_album_meta(self, id):
+        return self.api_call("album/get", id=id)
+
+    def get_track_meta(self, id):
+        return self.api_call("track/get", id=id)
+
+    def get_track_url(self, id, fmt_id):
+        return self.api_call("track/getFileUrl", id=id, fmt_id=fmt_id)
+
+    def get_artist_meta(self, id):
+        return self.multi_meta("artist/get", "albums_count", id, None)
+
+    def get_plist_meta(self, id):
+        return self.multi_meta("playlist/get", "tracks_count", id, None)
+
+    def get_label_meta(self, id):
+        return self.multi_meta("label/get", "albums_count", id, None)
+
     def test_secret(self, sec):
         try:
             self.api_call("track/getFileUrl", id=5966783, fmt_id=5, sec=sec)
             return True
-        except InvalidAppSecretError: return False
+        except InvalidAppSecretError:
+            return False
 
     def cfg_setup(self):
+        last_validation_error = None
         for secret in self.secrets:
-            if not secret: continue
-            if self.test_secret(secret):
-                self.sec = secret
+            if not secret:
+                continue
+            try:
+                if self.test_secret(secret):
+                    self.sec = secret
+                    break
+            except AppSecretValidationProxyError as exc:
+                last_validation_error = exc
                 break
         if self.sec is None:
+            if last_validation_error is not None:
+                raise last_validation_error
             raise InvalidAppSecretError("无法找到有效的 App Secret，Qobuz 可能更新了加密算法。\n" + RESET)
