@@ -198,11 +198,21 @@ def collect_config(console: Console, previous: Dict[str, str]) -> configparser.C
         console.print(f"\n[{C_OPT}]密钥类型:[/{C_OPT}]")
         console.print('[1] 网页密钥 (自动抓取)')
         console.print('[2] 安卓密钥 (推荐)')
-        secret_default = '2' if previous.get('app_id') == ANDROID_APP_ID else '1'
+        console.print('[3] 自定义 App ID / Secret')
+        current_has_custom = bool((previous.get('app_id') or '').strip()) and bool((previous.get('secrets') or '').strip())
+        if previous.get('app_id') == ANDROID_APP_ID:
+            secret_default = '2'
+        elif current_has_custom:
+            secret_default = '3'
+        else:
+            secret_default = '2'
         key_choice = _prompt_with_default(console, '请选择', secret_default)
         if key_choice == '2':
             config['DEFAULT']['app_id'] = ANDROID_APP_ID
             config['DEFAULT']['secrets'] = ANDROID_SECRET
+        elif key_choice == '3':
+            config['DEFAULT']['app_id'] = _prompt_with_default(console, '自定义 App ID', previous.get('app_id', ''))
+            config['DEFAULT']['secrets'] = _prompt_with_default(console, '自定义 App Secret(s)（多个用逗号分隔）', previous.get('secrets', ''), secret=True)
         else:
             try:
                 bundle = Bundle()
@@ -218,8 +228,37 @@ def collect_config(console: Console, previous: Dict[str, str]) -> configparser.C
         config['DEFAULT']['use_token'] = 'false'
         config['DEFAULT']['email'] = _prompt_with_default(console, '邮箱', previous.get('email', ''))
         config['DEFAULT']['password'] = _prompt_with_default(console, '密码', previous.get('password', ''), secret=True)
-        config['DEFAULT']['app_id'] = previous.get('app_id', ANDROID_APP_ID) or ANDROID_APP_ID
-        config['DEFAULT']['secrets'] = previous.get('secrets', ANDROID_SECRET) or ANDROID_SECRET
+        console.print(f"\n[{C_OPT}]App 凭证:[/{C_OPT}]")
+        console.print('[1] 保持当前 App ID / Secret')
+        console.print('[2] 安卓密钥 (推荐)')
+        console.print('[3] 网页密钥 (自动抓取)')
+        console.print('[4] 自定义 App ID / Secret')
+        current_has_custom = bool((previous.get('app_id') or '').strip()) and bool((previous.get('secrets') or '').strip())
+        if previous.get('app_id') == ANDROID_APP_ID:
+            secret_default = '2'
+        elif current_has_custom:
+            secret_default = '1'
+        else:
+            secret_default = '2'
+        key_choice = _prompt_with_default(console, '请选择', secret_default)
+        if key_choice == '1':
+            config['DEFAULT']['app_id'] = previous.get('app_id', ANDROID_APP_ID) or ANDROID_APP_ID
+            config['DEFAULT']['secrets'] = previous.get('secrets', ANDROID_SECRET) or ANDROID_SECRET
+        elif key_choice == '3':
+            try:
+                bundle = Bundle()
+                config['DEFAULT']['app_id'] = str(bundle.get_app_id())
+                config['DEFAULT']['secrets'] = ','.join(bundle.get_secrets().values())
+            except Exception as exc:
+                logger.warning('Bundle bootstrap failed, fallback to Android secret: %s', exc)
+                config['DEFAULT']['app_id'] = ANDROID_APP_ID
+                config['DEFAULT']['secrets'] = ANDROID_SECRET
+        elif key_choice == '4':
+            config['DEFAULT']['app_id'] = _prompt_with_default(console, '自定义 App ID', previous.get('app_id', ''))
+            config['DEFAULT']['secrets'] = _prompt_with_default(console, '自定义 App Secret(s)（多个用逗号分隔）', previous.get('secrets', ''), secret=True)
+        else:
+            config['DEFAULT']['app_id'] = ANDROID_APP_ID
+            config['DEFAULT']['secrets'] = ANDROID_SECRET
         config['DEFAULT']['user_id'] = ''
         config['DEFAULT']['user_auth_token'] = ''
         config['DEFAULT']['region'] = _prompt_with_default(console, '地区/区域(例如 US/JP)', previous.get('region', '--'))
