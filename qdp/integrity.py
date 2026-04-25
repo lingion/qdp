@@ -1,3 +1,4 @@
+import fnmatch
 import hashlib
 import json
 import logging
@@ -89,6 +90,14 @@ class IntegrityReport:
     missing_labels: List[str] = field(default_factory=list)
     missing_entries: List[Dict] = field(default_factory=list)
     matched_entries: List[Dict] = field(default_factory=list)
+    has_cover: bool = False
+    has_booklet: bool = False
+    cover_issues: List[str] = field(default_factory=list)
+    booklet_issues: List[str] = field(default_factory=list)
+    cover_valid: bool = False
+    cover_path: Optional[str] = None
+    booklets: List[Dict] = field(default_factory=list)
+    all_extras_valid: bool = False
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -104,6 +113,8 @@ class BatchCheckReport:
     missing_tracks: int
     legacy_hits: int
     stale_db: int
+    missing_covers: int = 0
+    missing_booklets: int = 0
     reports: List[Dict] = field(default_factory=list)
 
     def to_dict(self) -> Dict:
@@ -274,6 +285,237 @@ def scan_audio_files(base_dir: str) -> List[AudioFileInfo]:
     return files
 
 
+# ── Cover art and booklet constants ──
+
+COVER_FILENAMES = (
+    "cover.jpg", "cover.jpeg", "cover.png",
+    "folder.jpg", "folder.png",
+    "artwork.jpg", "artwork.png",
+    "front.jpg", "front.png",
+)
+
+BOOKLET_PATTERNS = ("Digital Booklet*.pdf", "booklet*.pdf")
+
+MIN_FILE_SIZE = 1024
+
+
+# ── Internal format helpers ──
+
+def _validate_file_magic(file_path: str, expected_format: str) -> Optional[str]:
+    """Validate file magic bytes. Returns an issue string or None if valid."""
+    try:
+        with open(file_path, "rb") as f:
+            header = f.read(8)
+    except OSError as exc:
+        return f"Cannot read file: {exc}"
+    if len(header) < 4:
+        return "File too short to read magic bytes"
+    if expected_format == "jpeg":
+        if not header[:3] == b"\xff\xd8\xff":
+            return f"Invalid JPEG magic bytes: {header[:3]!r}"
+    elif expected_format == "png":
+        if not header[:4] == b"\x89PNG":
+            return f"Invalid PNG magic bytes: {header[:4]!r}"
+    elif expected_format == "pdf":
+        if not header[:4] == b"%PDF":
+            return f"Invalid PDF magic bytes: {header[:4]!r}"
+    return None
+
+
+def _validate_cover(album_dir: str) -> Tuple[bool, Optional[str], List[str]]:
+    """Scan album_dir for cover art and validate it.
+
+    Returns (cover_valid, cover_path, cover_issues).
+    """
+    issues: List[str] = []
+    found_valid = False
+    cover_path: Optional[str] = None
+
+    for cover_name in COVER_FILENAMES:
+        candidate_path = os.path.join(album_dir, cover_name)
+        if not os.path.isfile(candidate_path):
+            continue
+
+        # Check file size
+        try:
+            file_size = os.path.getsize(candidate_path)
+        except OSError as exc:
+            issues.append(f"{cover_name}: cannot stat file: {exc}")
+            continue
+
+        if file_size < MIN_FILE_SIZE:
+            issues.append(f"{cover_name}: file too small ({file_size} bytes, minimum {MIN_FILE_SIZE})")
+            continue
+
+        # Check magic bytes
+        ext = os.path.splitext(cover_name)[1].lower()
+        expected_fmt = "jpeg" if ext in (".jpg", ".jpeg") else "png"
+        magic_issue = _validate_file_magic(candidate_path, expected_fmt)
+        if magic_issue:
+            issues.append(f"{cover_name}: {magic_issue}")
+            continue
+
+        if not found_valid:
+            cover_path = cover_name
+        found_valid = True
+
+    if not found_valid and not issues:
+        issues.append("No cover art file found")
+
+    return found_valid, cover_path, issues
+
+
+def _find_booklet_files(album_dir: str) -> List[str]:
+    """Find PDF booklet files in album_dir using BOOKLET_PATTERNS.
+
+    First matches against known booklet patterns, then falls back to any PDF.
+    Returns sorted list of filenames.
+    """
+    if not os.path.isdir(album_dir):
+        return []
+
+    all_names = os.listdir(album_dir)
+
+    # First pass: match against known booklet patterns
+    booklet_names: List[str] = []
+    for pattern in BOOKLET_PATTERNS:
+        for name in all_names:
+            if fnmatch.fnmatch(name, pattern) and name not in booklet_names:
+                booklet_names.append(name)
+
+    # If no pattern matches, fall back to any PDF in the directory
+    if not booklet_names:
+        booklet_names = [
+            name for name in all_names
+            if name.lower().endswith(".pdf")
+        ]
+
+    return sorted(booklet_names)
+
+
+def _validate_booklet(album_dir: str) -> Tuple[bool, List[Dict], List[str]]:
+    """Scan album_dir for PDF booklet files and validate them.
+
+    Returns (has_valid_booklet, booklets_detail_list, booklet_issues).
+    Each entry in booklets_detail_list has keys: path, valid, issues.
+    """
+    booklets: List[Dict] = []
+    issues: List[str] = []
+
+    if not os.path.isdir(album_dir):
+        return False, [], ["Album directory does not exist"]
+
+    pdf_files = _find_booklet_files(album_dir)
+
+    if not pdf_files:
+        return False, [], []
+
+    for pdf_name in pdf_files:
+        pdf_path = os.path.join(album_dir, pdf_name)
+        booklet_issues: List[str] = []
+        valid = True
+
+        # Check file size
+        try:
+            file_size = os.path.getsize(pdf_path)
+        except OSError as exc:
+            booklet_issues.append(f"cannot stat file: {exc}")
+            issues.append(f"{pdf_name}: cannot stat file: {exc}")
+            booklets.append({"path": pdf_name, "valid": False, "issues": booklet_issues})
+            continue
+
+        if file_size < MIN_FILE_SIZE:
+            booklet_issues.append(f"file too small ({file_size} bytes, minimum {MIN_FILE_SIZE})")
+            issues.append(f"{pdf_name}: file too small ({file_size} bytes, minimum {MIN_FILE_SIZE})")
+            booklets.append({"path": pdf_name, "valid": False, "issues": booklet_issues})
+            continue
+
+        # Check magic bytes
+        magic_issue = _validate_file_magic(pdf_path, "pdf")
+        if magic_issue:
+            booklet_issues.append(magic_issue)
+            issues.append(f"{pdf_name}: {magic_issue}")
+            booklets.append({"path": pdf_name, "valid": False, "issues": booklet_issues})
+            continue
+
+        booklets.append({"path": pdf_name, "valid": True, "issues": []})
+
+    found_valid = any(b["valid"] for b in booklets)
+    return found_valid, booklets, issues
+
+
+# ── Public validation utility ──
+
+def validate_file_format(filepath, expected_type="auto"):
+    """Validate that a file matches its expected format by checking magic bytes.
+
+    Args:
+        filepath: Path to the file.
+        expected_type: "image", "pdf", or "auto" (detect from extension).
+
+    Returns:
+        (is_valid, reason) tuple - (True, "") if valid, (False, "reason string") if not.
+    """
+    if not os.path.isfile(filepath):
+        return False, "file does not exist"
+
+    try:
+        file_size = os.path.getsize(filepath)
+    except OSError:
+        return False, "file does not exist"
+
+    if file_size < MIN_FILE_SIZE:
+        return False, f"file too small: {file_size} bytes"
+
+    ext = os.path.splitext(filepath)[1].lower()
+
+    # Resolve auto-detection from extension
+    if expected_type == "auto":
+        if ext in (".jpg", ".jpeg", ".png"):
+            expected_type = "image"
+        elif ext == ".pdf":
+            expected_type = "pdf"
+        else:
+            return False, f"unknown file type for extension: {ext}"
+
+    # Read header bytes
+    try:
+        with open(filepath, "rb") as f:
+            header = f.read(8)
+    except OSError as exc:
+        return False, f"cannot read file: {exc}"
+
+    if expected_type == "image":
+        is_jpeg = ext in (".jpg", ".jpeg")
+        is_png = ext == ".png"
+
+        if is_jpeg:
+            if header[:3] != b"\xff\xd8\xff":
+                return False, "invalid format: expected JPEG"
+        elif is_png:
+            if header[:8] != b"\x89PNG\r\n\x1a\n":
+                return False, "invalid format: expected PNG"
+        else:
+            # Generic image check — accept either JPEG or PNG
+            if not (header[:3] == b"\xff\xd8\xff" or header[:8] == b"\x89PNG\r\n\x1a\n"):
+                return False, "invalid format: expected image (JPEG or PNG)"
+
+    elif expected_type == "pdf":
+        if header[:4] != b"%PDF":
+            return False, "invalid format: expected PDF"
+        # Verify %%EOF trailer within last 1024 bytes
+        try:
+            with open(filepath, "rb") as f:
+                f.seek(max(0, file_size - 1024))
+                tail = f.read(1024)
+        except OSError:
+            return False, "cannot read PDF trailer"
+        if b"%%EOF" not in tail:
+            return False, "invalid format: PDF trailer %%EOF not found"
+
+    return True, ""
+
+
 def inspect_album_integrity(
     album_id: str,
     album_dir: str,
@@ -334,8 +576,28 @@ def inspect_album_integrity(
                 }
             )
 
+    # ── Cover art validation ──
+    cover_valid, cover_path, cover_issues = _validate_cover(album_dir)
+
+    # ── Booklet validation ──
+    booklet_found, booklets, booklet_issues = _validate_booklet(album_dir)
+
+    # ── Completeness logic ──
+    # An album is complete when:
+    # 1. All expected tracks are matched, AND
+    # 2. Cover art is present and valid (when meta has an image URL).
+    #    If meta has no image URL, cover is not required for completeness.
+    # Booklet is informational — not required for completeness.
+    tracks_ok = bool(expected_tracks) and not missing_entries
+    meta_has_image_url = bool(_safe_get(meta, "image", "large"))
+    cover_required = meta_has_image_url
+    complete = tracks_ok and (cover_valid or not cover_required)
+
+    # ── All-extras-valid flag ──
+    # True when cover is valid (or not required) and every found booklet is valid.
+    all_extras_valid = (cover_valid or not cover_required) and all(b["valid"] for b in booklets)
+
     db_hit = bool(downloads_db and handle_download_id(downloads_db, album_id, add_id=False))
-    complete = bool(expected_tracks) and not missing_entries
     db_stale = bool(db_hit and not complete)
     db_repaired = False
     if db_stale and repair_db and downloads_db:
@@ -379,6 +641,14 @@ def inspect_album_integrity(
         missing_labels=[entry["label"] for entry in missing_entries],
         missing_entries=missing_entries,
         matched_entries=matched_entries,
+        has_cover=cover_valid,
+        has_booklet=booklet_found,
+        cover_issues=cover_issues,
+        booklet_issues=booklet_issues,
+        cover_valid=cover_valid,
+        cover_path=cover_path,
+        booklets=booklets,
+        all_extras_valid=all_extras_valid,
     )
 
 
@@ -389,6 +659,8 @@ def summarize_album_reports(content_name: str, content_type: str, reports: Itera
     missing_tracks = sum(report.missing_count for report in report_list)
     legacy_hits = sum(report.legacy_naming_hits for report in report_list)
     stale_db = sum(1 for report in report_list if report.db_stale)
+    missing_covers = sum(1 for report in report_list if not report.has_cover)
+    missing_booklets = sum(1 for report in report_list if not report.has_booklet)
     return BatchCheckReport(
         content_name=content_name,
         content_type=content_type,
@@ -398,6 +670,8 @@ def summarize_album_reports(content_name: str, content_type: str, reports: Itera
         missing_tracks=missing_tracks,
         legacy_hits=legacy_hits,
         stale_db=stale_db,
+        missing_covers=missing_covers,
+        missing_booklets=missing_booklets,
         reports=[report.to_dict() for report in report_list],
     )
 
