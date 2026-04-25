@@ -163,8 +163,8 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 ## Webapp Demo
 
-- Live demo: https://1bdc9072.qdp-webapp-demo.pages.dev
-- Deployment URL: https://1bdc9072.qdp-webapp-demo.pages.dev
+- Live demo: https://3154c1b6.qdp-webapp-demo.pages.dev
+- Deployment URL: https://3154c1b6.qdp-webapp-demo.pages.dev
 
 ### Webapp Preview
 
