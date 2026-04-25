@@ -163,12 +163,16 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 ## Webapp Demo
 
-- Live demo: https://master.qdp-webapp-demo.pages.dev
-- Deployment URL: https://8685d694.qdp-webapp-demo.pages.dev
+- Live demo: https://1bdc9072.qdp-webapp-demo.pages.dev
+- Deployment URL: https://1bdc9072.qdp-webapp-demo.pages.dev
 
 ### Webapp Preview
 
 ![qdp webapp preview](docs/screenshots/webapp-home.jpg)
+
+### TUI Preview
+
+![qdp TUI search](docs/screenshots/tui-search.svg)
 
 
 ## Maintained By

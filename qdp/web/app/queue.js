@@ -1,7 +1,19 @@
 // Split from legacy app.js for lower-risk browser-native loading.
 
+// ═══ Queue Management ═══
+
+let _renderQueueTimer = 0
+
+function renderQueueDebounced(){
+  if(_renderQueueTimer) clearTimeout(_renderQueueTimer)
+  _renderQueueTimer = setTimeout(()=>{
+    _renderQueueTimer = 0
+    renderQueue()
+  }, 60)
+}
+
 function queueFromTracks(tracks, startIndex = 0, context = null){
-  state.queue = (Array.isArray(tracks) ? tracks : []).map(normTrack).filter(Boolean);
+  state.queue = (Array.isArray(tracks) ? tracks : []).map(normTrack).filter(t => t && t.id && String(t.id) !== 'undefined' && String(t.id) !== 'null');
   state.idx = state.queue.length ? Math.max(0, Math.min(startIndex, state.queue.length - 1)) : -1;
   state.queueContext = context ? buildQueueContext(context) : null;
   state.queueDrag.fromIndex = -1;
@@ -54,6 +66,88 @@ function commitQueueReorder(fromIndex, toIndex){
   persistPlayerSession();
   return reordered;
 }
+// ═══ Remove & Clear ═══
+
+async function removeQueueItem(index){
+  if(!state.queue.length || index < 0 || index >= state.queue.length) return;
+  const wasPlaying = state.playing;
+  const removedActive = index === state.idx;
+  state.queue.splice(index, 1);
+  if(!state.queue.length){
+    // Queue is now empty — stop playback
+    state.idx = -1;
+    state.playing = false;
+    const audio = $('audio');
+    if(audio){
+      setAudioEventGate('pause');
+      try{ audio.pause(); }catch(_e){}
+      audio.removeAttribute('src');
+      audio.load();
+    }
+    setPlayIcon(ICONS.play);
+    setPlayerStatus('idle', 'Queue is empty', { reason: 'queue-empty' });
+  }else if(removedActive){
+    // Removed the currently playing track — pause audio then advance to next
+    const audio = $('audio');
+    if(audio){
+      setAudioEventGate('pause');
+      try{ audio.pause(); }catch(_e){}
+    }
+    if(state.idx >= state.queue.length) state.idx = 0;
+    if(state.queueContext) state.queueContext.activeOccurrenceKey = trackOccurrenceKey(state.queue[state.idx], state.queue, state.idx);
+    renderQueue();
+    syncAuxiliaryUi();
+    persistPlayerSession();
+    if(_endedAdvanceTimer){ clearTimeout(_endedAdvanceTimer); _endedAdvanceTimer = 0; }
+    bumpRequestVersion('player');
+    state.navLock = true;
+    try{
+      await playCurrent('queue-remove');
+    }finally{
+      state.navLock = false;
+    }
+    return;
+  }else if(index < state.idx){
+    // Removed a track before the current one — adjust index
+    state.idx -= 1;
+  }
+  if(state.queueContext && state.idx >= 0){
+    state.queueContext.activeOccurrenceKey = trackOccurrenceKey(state.queue[state.idx], state.queue, state.idx);
+  }
+  renderQueue();
+  syncAuxiliaryUi();
+  persistPlayerSession();
+}
+function clearQueue(){
+  if(!state.queue.length) return;
+  if(!state._clearPending){
+    state._clearPending = true;
+    showToast('再次点击确认清空队列', 'warning');
+    setTimeout(()=>{ state._clearPending = false; }, 3000);
+    return;
+  }
+  state._clearPending = false;
+  state.queue = [];
+  state.idx = -1;
+  state.queueContext = null;
+  state.playing = false;
+  const audio = $('audio');
+  if(audio){
+    setAudioEventGate('pause');
+    try{ audio.pause(); }catch(_e){}
+    audio.removeAttribute('src');
+    audio.load();
+  }
+  setPlayIcon(ICONS.play);
+  setPlayerStatus('idle', 'Queue is empty', { reason: 'queue-cleared' });
+  syncNowPlaying({ title: '—', artist: '—', image: '' });
+  renderQueue();
+  syncAuxiliaryUi();
+  persistPlayerSession();
+  showToast('Queue cleared', 'info');
+}
+// ═══ Queue Drag & Drop ═══
+
 function clearQueueDragStyles(){
   document.querySelectorAll?.('.queueItem.dragging, .queueItem.dragOver').forEach((el)=>el.classList.remove('dragging', 'dragOver'));
 }
@@ -93,7 +187,10 @@ function bindQueueDragHandlers(row, i){
     if(Number.isInteger(fromIndex) && Number.isInteger(toIndex) && fromIndex !== toIndex) commitQueueReorder(fromIndex, toIndex);
   });
 }
+// ═══ Queue Rendering ═══
+
 function renderQueue(){
+  if(_renderQueueTimer){ clearTimeout(_renderQueueTimer); _renderQueueTimer = 0; }
   syncSidebarSections();
   const root = $('queue');
   if(!root) return;
@@ -101,16 +198,18 @@ function renderQueue(){
   syncAuxiliaryUi();
   if(!state.queue.length){
     root.className = 'queue sectionBody emptyMini';
-    root.textContent = 'No queue yet.';
+    root.textContent = 'Queue is empty.';
     return;
   }
   root.className = 'queue sectionBody';
+  root.setAttribute('role', 'list');
   state.queue.forEach((item, i)=>{
     const t = normTrack(item);
     if(!t) return;
     const pending = state.loadingTrackId && state.loadingTrackId === String(t.id || '');
     const row = document.createElement('div');
     row.className = `queueItem${i === state.idx ? ' active' : ''}${pending ? ' pending' : ''}`;
+    row.setAttribute('role', 'listitem');
     row.innerHTML = `
       <div class="queueDragHandle" aria-hidden="true"><span class="queueGrip"></span></div>
       <img class="queueThumb" src="${esc(t.image)}" alt="" />
@@ -128,18 +227,32 @@ function renderQueue(){
     if(subNode) subNode.textContent = buildQueueItemSubtitle(t, i);
     if(metaNode){
       metaNode.addEventListener('click', async ()=>{
-        state.idx = i;
-        if(state.queueContext) state.queueContext.activeOccurrenceKey = trackOccurrenceKey(state.queue[i], state.queue, i);
-        renderQueue();
-        syncAuxiliaryUi();
-        await playCurrent('queue-click');
+        // User explicitly clicked — force-cancel any pending auto-advance
+        if(typeof _endedAdvanceTimer !== 'undefined' && _endedAdvanceTimer){ clearTimeout(_endedAdvanceTimer); _endedAdvanceTimer = 0; }
+        if(typeof _midPlaybackRetrying !== 'undefined') _midPlaybackRetrying = false;
+        state.navLock = false; // Force release in case auto-advance is stuck
+        bumpRequestVersion('player'); // Invalidate any in-flight playCurrent
+        state.navLock = true;
+        try{
+          state.idx = i;
+          if(state.queueContext) state.queueContext.activeOccurrenceKey = trackOccurrenceKey(state.queue[i], state.queue, i);
+          renderQueue();
+          syncAuxiliaryUi();
+          await playCurrent('queue-click');
+        }finally{
+          state.navLock = false;
+        }
       });
     }
     if(actions){
       actions.appendChild(makeTrackDownloadLink(t, 'Download track'));
       actions.appendChild(makeBtn('+', ()=>choosePlaylistForTrack(t)));
+      const removeBtn = makeIconButton('close', ()=>removeQueueItem(i), 'Remove from queue');
+      removeBtn.classList.add('queueRemoveBtn');
+      actions.appendChild(removeBtn);
     }
     bindQueueDragHandlers(row, i);
     root.appendChild(row);
   });
+  updateQueueInfo();
 }
