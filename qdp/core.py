@@ -125,7 +125,7 @@ class QobuzDL:
     def _print_search_status(self, query, search_type, limit, offset, result_count, action):
         page_num = (offset // limit) + 1
         total_hint = "总结果未知"
-        console.print(f"[{C_WARN}]搜索[{search_type}] 关键词: {query} | 第 {page_num} 页 | 本页 {result_count} 条 | {total_hint} | 操作: {action}[/{C_WARN}]")
+        console.print(f"[{C_WARN}]搜索[{search_type}] 关键词:[/{C_WARN}] {query} | 第 {page_num} 页 | 本页 {result_count} 条 | {total_hint} | 操作: {action}")
 
     def run_search(self, initial_query, search_type, limit):
         query = initial_query
@@ -238,7 +238,7 @@ class QobuzDL:
                 reports.append(report)
             except (requests.exceptions.RequestException, OSError, ValueError, sqlite3.Error, NonStreamable) as exc:
                 logger.warning("Check failed for album %s: %s", item.get("id"), exc)
-                console.print(f"[{C_ERR}]校验失败: {item.get('title', item.get('id'))} -> {exc}[/{C_ERR}]")
+                console.print(f"[{C_ERR}]校验失败:[/{C_ERR}] {item.get('title', item.get('id'))} -> {exc}")
         dloader._print_check_summary(content_name, reports, content_type=content_type)
         return reports
 
@@ -442,7 +442,7 @@ class QobuzDL:
                 if not pages:
                     return
                 content_name, items = self._collect_paginated_items(pages, type_dict["iterable_key"])
-                console.print(f"[{C_WARN}]正在获取 {url_type}: {content_name}[/{C_WARN}]")
+                console.print(f"[{C_WARN}]正在获取 {url_type}:[/{C_WARN}] {content_name}")
                 target_path = os.path.join(self.directory, sanitize_filename(content_name))
                 target_artist_id = item_id if url_type == "artist" else None
                 normalized_items = self._normalize_collection_items(items, url_type, target_artist_id=target_artist_id)
@@ -501,6 +501,9 @@ class QobuzDL:
                     links.append(href)
             if not links:
                 console.print(f"[{C_WARN}]未从 Last.fm 页面提取到可下载条目。[/{C_WARN}]")
+                return
+            console.print(f"[{C_MAIN}]从 Last.fm 提取到 {len(links)} 个条目，尝试匹配 Qobuz...[/{C_MAIN}]")
+            self.download_list_of_urls(links)
         except requests.exceptions.RequestException as exc:
             logger.warning("Failed to load Last.fm playlist %s: %s", playlist_url, exc)
             console.print(f"[{C_ERR}]Last.fm 列表读取失败: {exc}[/{C_ERR}]")
