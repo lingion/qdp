@@ -7,12 +7,13 @@ requirements = [
     "requests",
     "mutagen",
     "beautifulsoup4",
+    "colorama",
     "rich",
 ]
 
 setup(
     name=pkg_name,
-    version="114.0.1",
+    version="1.7.2",
     author="lingion",
     description="Local Qobuz web player and toolkit",
     url="https://github.com/Lingion",
