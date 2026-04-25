@@ -14,6 +14,10 @@ class InvalidAppSecretError(Exception):
     pass
 
 
+class AppSecretValidationProxyError(Exception):
+    pass
+
+
 class InvalidQuality(Exception):
     pass
 

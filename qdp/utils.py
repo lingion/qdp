@@ -5,6 +5,7 @@ import re
 import string
 import threading
 import time
+import urllib.parse
 from urllib.parse import quote
 
 from mutagen.flac import FLAC
@@ -55,11 +56,19 @@ def get_proxy_list():
 
 
 def get_active_proxy():
-    """按配置顺序轮询返回一个代理；未配置时返回 None。"""
-    global _PROXY_CURSOR
+    """按成功率+延迟综合排名智能选择代理；无统计数据时回退轮询。未配置时返回 None。"""
     proxies = get_proxy_list()
     if not proxies:
         return None
+    try:
+        from qdp.proxy_stats import get_best_proxy as _get_best_proxy
+        best = _get_best_proxy(proxies)
+        if best:
+            return best
+    except Exception as exc:
+        logger.debug("Smart proxy selection fallback: %s", exc)
+    # fallback: round-robin
+    global _PROXY_CURSOR
     with _PROXY_LOCK:
         index = _PROXY_CURSOR % len(proxies)
         proxy = proxies[index]
@@ -67,8 +76,30 @@ def get_active_proxy():
     return proxy
 
 
+# Domains directly accessible from mainland China — no proxy needed
+# Audio streaming CDN is confirmed accessible; image CDNs are NOT always
+# directly reachable, so they should go through proxy when one is configured.
+_DIRECT_ACCESS_DOMAINS = (
+    "akamaized.net",        # Audio streaming CDN (streaming-qobuz-*.akamaized.net)
+    "akamaized.com",        # Akamai alternate CDN
+)
+
+
+def _should_bypass_proxy(url):
+    """Check if a URL targets a domain that doesn't need proxying."""
+    try:
+        host = urllib.parse.urlparse(url).netloc.lower()
+        # Remove port if present
+        host = host.split(":")[0]
+        return any(host == d or host.endswith("." + d) for d in _DIRECT_ACCESS_DOMAINS)
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 def format_proxy_url(raw_url):
     """文件下载用的代理封装。"""
+    if _should_bypass_proxy(raw_url):
+        return raw_url
     proxy_host = get_active_proxy()
     if proxy_host:
         encoded_url = quote(raw_url, safe="")

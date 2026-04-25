@@ -268,8 +268,11 @@ def list_accounts(config_file: str = CONFIG_FILE) -> List[Tuple[str, Dict[str, s
 
 
 def get_active_account(config_file: str = CONFIG_FILE) -> str:
-    config = _load_config(config_file)
-    return config['DEFAULT'].get(ACTIVE_ACCOUNT_KEY, '') if ('DEFAULT' in config or config.has_section('DEFAULT')) else ''
+    try:
+        config = _load_config(config_file)
+        return config['DEFAULT'].get(ACTIVE_ACCOUNT_KEY, '')
+    except (KeyError, TypeError, configparser.Error):
+        return ''
 
 
 def _account_identity(source: Dict[str, str]) -> tuple[str, str, str]:
