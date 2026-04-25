@@ -37,6 +37,7 @@ from qdp.integrity import (
     make_track_label,
 )
 from qdp.sidecar import build_album_sidecar_payload, load_sidecar, summarize_quality_from_tracks, write_sidecar
+from qdp.proxy_stats import record_success as _ps_record_success, record_failure as _ps_record_failure
 from qdp.utils import format_proxy_url
 
 DEFAULT_FOLDER = "{artist} - {album} ({year})"
@@ -45,8 +46,8 @@ MAX_WORKERS = 10
 DEFAULT_PREPARE_WORKERS = 3
 DEFAULT_PREHEAT_WORKERS = 6
 
-DEFAULT_MAX_RETRIES = 4
-DEFAULT_TIMEOUT = 30
+DEFAULT_MAX_RETRIES = 6
+DEFAULT_TIMEOUT = 45
 DEFAULT_PREFETCH_WORKERS = None  # use --workers when None
 DEFAULT_URL_RATE = 8  # per second global track/getFileUrl window
 MAX_PATH_LENGTH = 240
@@ -72,6 +73,8 @@ C_WARN = "#e5c07b"
 C_ERR = "#e06c75"
 C_DIM = "#5c6370"
 C_BAR_BG = "#3e4451"
+
+_BROWSER_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
 
 @dataclass
@@ -226,9 +229,197 @@ class Download:
         else:
             self.download_track()
 
+    @staticmethod
+    def _backoff(n: int, base: float = 0.8, cap: float = 12.0) -> float:
+        return min(cap, base * (2 ** max(0, n - 1)) + random.random() * 0.5)
+
+    def _download_with_retry(
+        self,
+        direct_url: str,
+        dest_path: str,
+        expected_format: Optional[str] = None,
+        min_size: int = 1024,
+        progress=None,
+        task_id=None,
+    ) -> bool:
+        """Shared retry engine for downloading any URL (tracks, covers, booklets).
+
+        Handles proxy selection, direct fallback, exponential backoff, validation,
+        and atomic tmp→final rename.
+
+        Returns True on success. Raises DownloadPipelineError on exhaustion.
+        """
+        tmp_path = dest_path + ".tmp"
+        retry_budget = {
+            "network": max(1, self.max_retries),
+            "proxy": max(1, min(3, self.max_retries)),
+            "io": 1,
+            "auth": 0,
+            "copyright": 0,
+            "generic": max(1, min(2, self.max_retries)),
+        }
+        attempts: Dict[str, int] = {k: 0 for k in retry_budget}
+        last_error: Optional[Exception] = None
+
+        # Pre-resolve direct URL from proxy wrapper if needed
+        resolved_direct = direct_url
+        if "/proxy?url=" in direct_url:
+            from urllib.parse import unquote
+            resolved_direct = unquote(direct_url.split("/proxy?url=", 1)[1])
+
+        while True:
+            # --- attempt: direct first (only first attempt, unless force_proxy) ---
+            direct_ok = False
+            if resolved_direct and not self.force_proxy and sum(attempts.values()) == 0:
+                try:
+                    resp = requests.get(
+                        resolved_direct, stream=True, timeout=10,
+                        headers={"User-Agent": _BROWSER_USER_AGENT},
+                    )
+                    resp.raise_for_status()
+                    direct_ok = True
+                except Exception:
+                    pass
+
+            proxy_host = None
+            attempt_url = resolved_direct
+
+            if not direct_ok:
+                proxy_host = self.proxy_pool.choose() if self.proxy_pool.proxies else None
+                if self.force_proxy and not proxy_host:
+                    raise DownloadPipelineError("proxy", "代理池无健康节点（force-proxy 已开启）")
+                if proxy_host:
+                    attempt_url = f"{proxy_host}/proxy?url={requests.utils.quote(resolved_direct, safe='')}"
+                elif resolved_direct != direct_url:
+                    attempt_url = resolved_direct
+                else:
+                    attempt_url = direct_url
+
+            try:
+                if direct_ok:
+                    response = resp
+                else:
+                    response = requests.get(
+                        attempt_url, stream=True, timeout=self.timeout,
+                        headers={"User-Agent": _BROWSER_USER_AGENT},
+                    )
+                response.raise_for_status()
+                total_length = int(response.headers.get("content-length", 0))
+
+                if progress and task_id is not None:
+                    progress.update(task_id, completed=0, total=total_length)
+                    progress.start_task(task_id)
+
+                with open(tmp_path, "wb") as fobj:
+                    for chunk in response.iter_content(chunk_size=32768):
+                        if chunk:
+                            fobj.write(chunk)
+                            if progress and task_id is not None:
+                                progress.advance(task_id, len(chunk))
+                response.close()
+
+                actual_size = os.path.getsize(tmp_path)
+
+                if total_length and actual_size != total_length:
+                    os.remove(tmp_path)
+                    raise DownloadPipelineError(
+                        "network",
+                        f"文件大小不匹配: expected={total_length}, actual={actual_size}",
+                    )
+                if actual_size < min_size:
+                    os.remove(tmp_path)
+                    raise DownloadPipelineError(
+                        "network",
+                        f"文件过小 ({actual_size} bytes < {min_size})",
+                    )
+                if expected_format and not _validate_file_format(tmp_path, expected_format):
+                    os.remove(tmp_path)
+                    raise DownloadPipelineError(
+                        "network",
+                        f"文件格式不匹配: expected {expected_format}",
+                    )
+
+                os.replace(tmp_path, dest_path)
+
+                if proxy_host:
+                    self.proxy_pool.report_success(proxy_host)
+                    try:
+                        _ps_record_success(proxy_host)
+                    except Exception:
+                        pass
+                return True
+
+            except (DownloadPipelineError, requests.exceptions.RequestException, OSError) as exc:
+                if os.path.isfile(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+
+                if proxy_host:
+                    self.proxy_pool.report_failure(proxy_host)
+                    try:
+                        _ps_record_failure(proxy_host)
+                    except Exception:
+                        pass
+
+                if progress and task_id is not None:
+                    progress.update(task_id, completed=0)
+
+                last_error = exc
+                category = self._classify_retryable_error(exc)
+                attempts[category] = attempts.get(category, 0) + 1
+                logger.debug(
+                    "Download attempt %d failed (%s): %s",
+                    sum(attempts.values()), category, exc,
+                )
+
+                # Direct fallback when proxies exhausted
+                if category == "proxy" and not self.force_proxy and attempts[category] > retry_budget.get(category, 0):
+                    try:
+                        dresp = requests.get(
+                            resolved_direct, stream=True, timeout=self.timeout,
+                            headers={"User-Agent": _BROWSER_USER_AGENT},
+                        )
+                        dresp.raise_for_status()
+                        total_length = int(dresp.headers.get("content-length", 0))
+                        if progress and task_id is not None:
+                            progress.update(task_id, completed=0, total=total_length)
+                            progress.start_task(task_id)
+                        with open(tmp_path, "wb") as fobj:
+                            for chunk in dresp.iter_content(chunk_size=32768):
+                                if chunk:
+                                    fobj.write(chunk)
+                                    if progress and task_id is not None:
+                                        progress.advance(task_id, len(chunk))
+                        dresp.close()
+                        actual_size = os.path.getsize(tmp_path)
+                        if total_length and actual_size != total_length:
+                            os.remove(tmp_path)
+                            raise DownloadPipelineError("network", f"文件大小不匹配: expected={total_length}, actual={actual_size}")
+                        if actual_size < min_size:
+                            os.remove(tmp_path)
+                            raise DownloadPipelineError("network", f"文件过小 ({actual_size} bytes)")
+                        if expected_format and not _validate_file_format(tmp_path, expected_format):
+                            os.remove(tmp_path)
+                            raise DownloadPipelineError("network", f"文件格式不匹配: expected {expected_format}")
+                        os.replace(tmp_path, dest_path)
+                        return True
+                    except (DownloadPipelineError, requests.exceptions.RequestException, OSError) as dexc:
+                        last_error = dexc
+                        cat = self._classify_retryable_error(dexc)
+                        attempts[cat] = attempts.get(cat, 0) + 1
+
+                if attempts[category] > retry_budget.get(category, 0):
+                    raise DownloadPipelineError(category, f"{category} 失败: {last_error}")
+
+                time.sleep(self._backoff(attempts[category]))
+
     def _get_album_meta_cached(self, album_id: str):
         album_id = str(album_id)
-        cache_key = (id(self.client), album_id)
+        # Use a stable key instead of id() which can be reused after GC
+        client_key = getattr(self.client, 'email', None) or id(self.client)
+        cache_key = (client_key, album_id)
         if cache_key not in self._album_meta_cache:
             self._album_meta_cache[cache_key] = self.client.get_album_meta(album_id)
         return self._album_meta_cache[cache_key]
@@ -260,16 +451,22 @@ class Download:
     def print_integrity_report(self, report):
         status = "完整" if report.complete else "不完整"
         color = C_OK if report.complete else C_WARN
+        cover_status = "✓" if report.has_cover else "✗"
+        booklet_status = "✓" if report.has_booklet else "—"
         console.print(
             f"[{color}]• {report.album_title}[/{color}] | {status} | 已命中 {report.matched_count}/{report.expected_count} | 缺少 {report.missing_count}"
         )
         console.print(
-            f"[{C_DIM}]目录: {report.album_dir} | 旧命名命中: {report.legacy_naming_hits} | 标签识别命中: {report.tag_match_hits} | DB: {'陈旧' if report.db_stale else ('已命中' if report.db_hit else '未命中')}[/{C_DIM}]"
+            f"[{C_DIM}]目录: {report.album_dir} | 旧命名命中: {report.legacy_naming_hits} | 标签识别命中: {report.tag_match_hits} | 封面: {cover_status} | 小册子: {booklet_status} | DB: {'陈旧' if report.db_stale else ('已命中' if report.db_hit else '未命中')}[/{C_DIM}]"
         )
         if report.missing_labels:
             preview = ", ".join(report.missing_labels[:5])
             suffix = " ..." if len(report.missing_labels) > 5 else ""
             console.print(f"[{C_DIM}]缺失曲目: {preview}{suffix}[/{C_DIM}]")
+        if report.cover_issues:
+            console.print(f"[{C_WARN}]封面问题: {'; '.join(report.cover_issues)}[/{C_WARN}]")
+        if report.booklet_issues:
+            console.print(f"[{C_DIM}]小册子问题: {'; '.join(report.booklet_issues)}[/{C_DIM}]")
 
     def _album_directory(self, meta, base_path):
         album_title = get_title(meta)
@@ -419,31 +616,93 @@ class Download:
         raise DownloadPipelineError("generic", "URL 预热失败")
 
     def _download_booklet(self, meta, save_dir):
+        """Download all PDF booklets listed in the album metadata.
+
+        Returns a list of ``(filename, success_bool)`` tuples — one per booklet
+        file.  Returns an empty list when skipped (``no_booklet``, ``check_only``,
+        or no goodies in metadata).
+
+        Exceptions from :meth:`_download_extra_file` propagate to the caller.
+        """
         if self.check_only or self.no_booklet or "goodies" not in meta:
-            return
-        try:
-            count = 1
-            for goodie in meta["goodies"]:
-                if goodie.get("file_format_id") != 21:
-                    continue
-                fname = "Digital Booklet.pdf" if count == 1 else f"Digital Booklet {count}.pdf"
-                url = format_proxy_url(goodie["url"])
-                _get_extra_proxy(url, save_dir, fname)
-                count += 1
-        except Exception as exc:
-            logger.warning("Booklet download failed for %s: %s", save_dir, exc)
+            return []
+        results = []
+        count = 1
+        for goodie in meta["goodies"]:
+            if goodie.get("file_format_id") != 21:
+                continue
+            fname = "Digital Booklet.pdf" if count == 1 else f"Digital Booklet {count}.pdf"
+            url = format_proxy_url(goodie["url"])
+            success = self._download_extra_file(url, save_dir, fname, expected_format="pdf")
+            results.append((fname, success))
+            count += 1
+        return results
 
     def _download_cover_art(self, meta, save_dir, filename="cover.jpg"):
-        if self.check_only or self.no_cover:
-            return
+        """Download cover art image.
+
+        Returns ``True`` when the cover is successfully downloaded, was
+        already valid, or when the download is explicitly skipped via
+        ``no_cover`` / ``check_only`` (skipped is not a failure).
+        Returns ``False`` when no image URL is available or all retries
+        are exhausted.
+
+        Exceptions from :meth:`_download_extra_file` propagate to the caller.
+        """
+        if self.no_cover:
+            return False  # explicitly skipped — caller knows no cover was saved
+        if self.check_only:
+            return True  # skipped, not a failure
+        img_url = meta.get("image", {}).get("large")
+        if not img_url:
+            logger.warning("No cover art URL found for %s", save_dir)
+            return False
+        url = format_proxy_url(self._get_max_quality_url(img_url))
+        # 使用 expected_format=None 而不是 "jpeg"，
+        # 因为 Qobuz 返回的封面图片可能是 JPEG 或 PNG，
+        # 固定 "jpeg" 会导致 PNG 格式封面被判定为无效然后被删除
+        return self._download_extra_file(url, save_dir, filename, expected_format=None)
+
+    # ------------------------------------------------------------------
+    # Extra asset download (covers, booklets) — delegates to shared engine
+    # ------------------------------------------------------------------
+
+    def _download_extra_file(
+        self,
+        url: str,
+        directory: str,
+        filename: str,
+        expected_format: Optional[str] = None,
+    ) -> bool:
+        """Download an extra asset with retry, validation, and atomic write.
+
+        Returns True on success (or if already valid), False on exhaustion.
+        """
+        os.makedirs(directory, exist_ok=True)
+        final_path = os.path.join(directory, filename)
+
+        # Pre-validation: skip if already valid
+        if os.path.isfile(final_path):
+            if os.path.getsize(final_path) >= 1024 and (
+                expected_format is None or _validate_file_format(final_path, expected_format)
+            ):
+                logger.debug("Extra file already valid, skipping: %s", final_path)
+                return True
+            logger.warning("Existing extra file invalid (size/magic), re-downloading: %s", final_path)
+            try:
+                os.remove(final_path)
+            except OSError:
+                pass
+
         try:
-            img_url = meta.get("image", {}).get("large")
-            if not img_url:
-                return
-            url = format_proxy_url(self._get_max_quality_url(img_url))
-            _get_extra_proxy(url, save_dir, filename)
-        except Exception as exc:
-            logger.warning("Cover art download failed for %s: %s", save_dir, exc)
+            return self._download_with_retry(
+                url, final_path,
+                expected_format=expected_format,
+                min_size=1024,
+            )
+        except DownloadPipelineError as exc:
+            logger.warning("Extra file download exhausted retries for %s: %s", final_path, exc)
+            return False
 
     def _fetch_and_prepare_album(self, album_simple, base_path):
         album_id = str(album_simple["id"])
@@ -460,8 +719,13 @@ class Download:
                 return {"status": "checked", "report": report, "album_id": album_id, "album_title": report.album_title}
 
             os.makedirs(album_dir, exist_ok=True)
-            self._download_cover_art(meta, album_dir, "cover.jpg")
-            self._download_booklet(meta, album_dir)
+            cover_ok = self._download_cover_art(meta, album_dir, "cover.jpg")
+            if not cover_ok:
+                logger.warning("Cover art download failed for album %s during prepare phase", album_id)
+            booklet_results = self._download_booklet(meta, album_dir)
+            for fname, bok in booklet_results:
+                if not bok:
+                    logger.warning("Booklet download failed during prepare phase: %s", fname)
 
             tracks = meta.get("tracks", {}).get("items", [])
             is_multiple = len({t.get("media_number", 1) for t in tracks}) > 1
@@ -507,7 +771,7 @@ class Download:
             album_name = item.get("album", {}).get("title") or (meta or {}).get("title") or "Unknown Album"
             failed_list.append({"item": item, "error": str(exc), "album": album_name, "path": item.get("_manual_dir", dirn), "label": make_track_label(item)})
             logger.warning("Track failed: %s (%s)", display_title, exc)
-            progress.console.print(f"[{C_ERR}]失败 {display_name}: {exc}[/{C_ERR}]")
+            progress.console.print(f"[{C_ERR}]失败[/{C_ERR}] {display_name}: {exc}")
         finally:
             progress.update(overall_task_id, advance=1)
             progress.remove_task(task_id)
@@ -579,8 +843,8 @@ class Download:
             return {"checked": 0, "downloaded": 0}
 
         stats = self._run_multithreaded_download(final_list, self.path, None, False, ind_cover=batch_ind_cover, track_fmt=self.fmt_single)
-        console.print(f"[{C_OK}]✔ {content_name} 任务结束[/{C_OK}]")
-        console.print(f"[{C_MAIN}]📂 保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
+        console.print(f"[{C_OK}]✔ 任务结束:[/{C_OK}] {content_name}")
+        console.print(f"[{C_MAIN}]📂 保存于:[/{C_MAIN}] {os.path.abspath(self.path)}")
         return stats
 
     def _process_real_track(self, item, count, total_items, meta, dirn, is_multiple, progress, task_id, ind_cover, track_fmt):
@@ -630,11 +894,81 @@ class Download:
         # Stage 3.
         stats = self._run_multithreaded_download(tracks, dirn, meta, is_multiple, ind_cover=False, track_fmt=self.track_format)
 
+        # -- Post-track re-verification of cover art and booklet ---
+        # After all tracks finish, re-check whether cover/booklet landed
+        # successfully.  If missing or corrupt, retry once using the
+        # hardened download methods.
+        has_cover = False
+        if not self.no_cover:
+            # 优先检查 cover.jpg，也兼容 cover.png
+            cover_candidates = [
+                os.path.join(dirn, "cover.jpg"),
+                os.path.join(dirn, "cover.jpeg"),
+                os.path.join(dirn, "cover.png"),
+            ]
+            for cover_path in cover_candidates:
+                if not os.path.isfile(cover_path):
+                    continue
+                if os.path.getsize(cover_path) < 1024:
+                    continue
+                if _validate_file_format(cover_path, "jpeg") or _validate_file_format(cover_path, "png"):
+                    has_cover = True
+                    break
+
+            if not has_cover:
+                logger.info("Post-track re-verification: cover art missing/invalid, retrying download")
+                try:
+                    retry_cover = self._download_cover_art(meta, dirn, "cover.jpg")
+                    if retry_cover:
+                        logger.info("Post-track cover art re-download succeeded")
+                        has_cover = True
+                    else:
+                        logger.warning("Post-track cover art re-download failed (no URL or retries exhausted)")
+                except Exception as exc:
+                    logger.warning("Post-track cover art re-download failed: %s", exc)
+
+        has_booklet = False
+        if not self.no_booklet and "goodies" in meta:
+            # Check if any valid PDF booklet exists in the directory
+            has_goodies_pdfs = any(
+                g.get("file_format_id") == 21 for g in meta.get("goodies", [])
+            )
+            if has_goodies_pdfs:
+                pdf_exists = any(
+                    os.path.isfile(os.path.join(dirn, f)) and os.path.getsize(os.path.join(dirn, f)) >= 1024 and _validate_file_format(os.path.join(dirn, f), "pdf")
+                    for f in os.listdir(dirn) if f.lower().endswith(".pdf")
+                ) if os.path.isdir(dirn) else False
+                has_booklet = pdf_exists
+                if not has_booklet:
+                    logger.info("Post-track re-verification: booklet missing/invalid, retrying download")
+                    try:
+                        booklet_results = self._download_booklet(meta, dirn)
+                        if any(ok for _, ok in booklet_results):
+                            logger.info("Post-track booklet re-download succeeded")
+                            has_booklet = True
+                        else:
+                            logger.warning("Post-track booklet re-download returned no successful downloads")
+                    except Exception as exc:
+                        logger.warning("Post-track booklet re-download failed: %s", exc)
+
         quality_summary = summarize_quality_from_tracks(tracks)
         sidecar_payload = build_album_sidecar_payload(meta, dirn, self.folder_format, self.track_format, tracks=tracks, quality_summary=quality_summary)
+        sidecar_payload["has_cover"] = has_cover
+        sidecar_payload["has_booklet"] = has_booklet
         sidecar_path = write_sidecar(dirn, sidecar_payload)
 
         final_report, _, _ = self.inspect_album(self.item_id, base_path=self.path, announce=True, repair_db=False)
+
+        # -- Final summary with cover/booklet status ---
+        cover_sym = "✓" if has_cover else "✗"
+        booklet_sym = "✓" if has_booklet else "—"
+        track_summary = f"{stats.get('success', 0)}/{stats.get('success', 0) + stats.get('failed', 0) + stats.get('invalid', 0)}"
+        console.print(
+            f"[{C_OK}]封面:[/{C_OK}] {cover_sym} | "
+            f"[{C_OK}]Booklet:[/{C_OK}] {booklet_sym} | "
+            f"[{C_OK}]曲目:[/{C_OK}] {track_summary}"
+        )
+
         if self.downloads_db:
             upsert_download_entry(
                 self.downloads_db,
@@ -655,7 +989,7 @@ class Download:
                     "sidecar_path": sidecar_path,
                 },
             )
-        console.print(f"[{C_MAIN}]📂 保存于: {os.path.abspath(dirn)}[/{C_MAIN}]")
+        console.print(f"[{C_MAIN}]📂 保存于:[/{C_MAIN}] {os.path.abspath(dirn)}")
         logger.info("Album download summary: %s", stats)
         return final_report.to_dict()
 
@@ -922,7 +1256,7 @@ class Download:
             meta["_actual_quality"] = resolved.get("actual_quality") or {}
             is_mp3 = int((resolved.get("actual_quality") or {}).get("quality_code") or self.quality) == 5
             self._download_and_tag(self.path, 1, parse, meta, meta, True, is_mp3, None, progress, task_id, ind_cover=True, track_fmt=self.track_format)
-        console.print(f"\n[{C_MAIN}]📂 保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
+        console.print(f"\n[{C_MAIN}]📂 保存于:[/{C_MAIN}] {os.path.abspath(self.path)}")
         return {"checked": False, "downloaded": True}
 
     def _build_final_track_path(self, root_dir: str, formatted_name: str, extension: str, uniqueness_key: str) -> str:
@@ -937,12 +1271,11 @@ class Download:
 
     def _download_and_tag(self, root_dir, tmp_count, track_url_dict, track_metadata, album_or_track_metadata, is_track, is_mp3, multiple, progress, task_id, ind_cover, track_fmt):
         extension = ".mp3" if is_mp3 else ".flac"
-        # Prefer proxy for download stage, but allow direct fallback.
         url = track_url_dict["url"]
         if multiple:
             root_dir = os.path.join(root_dir, f"Disc {multiple}")
         os.makedirs(root_dir, exist_ok=True)
-        temp_file = os.path.join(root_dir, f".{tmp_count:02}.tmp")
+
         context = build_filename_context(track_metadata, track_url_dict)
         formatted_name = track_fmt.format(**context)
         uniqueness_key = f"{track_metadata.get('id', '')}:{formatted_name}:{extension}"
@@ -952,6 +1285,8 @@ class Download:
         if multiple and track_metadata.get("_manual_dir"):
             base_album_dir = track_metadata.get("_manual_dir")
         track_metadata["_expected_rel_path"] = os.path.relpath(final_file, base_album_dir)
+
+        # Skip if already valid
         if os.path.isfile(final_file):
             if os.path.getsize(final_file) >= 1024:
                 try:
@@ -964,123 +1299,57 @@ class Download:
                     os.remove(final_file)
             else:
                 os.remove(final_file)
-        retry_budget = {
-            "network": max(1, self.max_retries),
-            "proxy": max(1, min(3, self.max_retries)),
-            "io": 1,
-            "auth": 0,
-            "copyright": 0,
-            "generic": max(1, min(2, self.max_retries)),
-        }
-        attempts = {key: 0 for key in retry_budget}
-        last_error = None
 
-        def _backoff(n: int, base: float = 0.8, cap: float = 12.0) -> float:
-            # Exponential backoff with jitter.
-            return min(cap, base * (2 ** max(0, n - 1)) + random.random() * 0.5)
+        # Use shared retry engine for download
+        _uid = track_metadata.get("id") or tmp_count
+        temp_file = os.path.join(root_dir, f"qdp_{_uid}.tmp")
 
-        # Download URL can be proxied; we support (proxy pool -> direct) fallback.
-        direct_url = track_url_dict["url"]
-
-        while True:
-            proxy_host = self.proxy_pool.choose() if self.proxy_pool.proxies else None
-            use_proxy = bool(proxy_host)
-            if self.force_proxy and not proxy_host:
-                # Force proxy but none healthy -> treat as failure.
-                raise DownloadPipelineError("proxy", "代理池无健康节点（force-proxy 已开启）")
-            if self.force_proxy:
-                use_proxy = True
-            attempt_url = f"{proxy_host}/proxy?url={requests.utils.quote(direct_url, safe='')}" if use_proxy and proxy_host else (direct_url if not use_proxy else format_proxy_url(direct_url))
-            try:
-                response = requests.get(attempt_url, stream=True, timeout=self.timeout)
-                response.raise_for_status()
-                total_length = int(response.headers.get("content-length", 0))
-                progress.update(task_id, completed=0, total=total_length)
-                progress.start_task(task_id)
-                with open(temp_file, "wb") as file_obj:
-                    for chunk in response.iter_content(chunk_size=32768):
-                        if chunk:
-                            file_obj.write(chunk)
-                            progress.advance(task_id, len(chunk))
-                if total_length and os.path.getsize(temp_file) != total_length:
-                    raise DownloadPipelineError("network", f"文件大小不匹配: expected={total_length}, actual={os.path.getsize(temp_file)}")
-                if use_proxy:
-                    self.proxy_pool.report_success(proxy_host)
-                break
-            except Exception as exc:
-                category = self._classify_retryable_error(exc)
-                last_error = exc
-                attempts[category] = attempts.get(category, 0) + 1
-                if use_proxy:
-                    self.proxy_pool.report_failure(proxy_host)
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-                progress.update(task_id, completed=0)
-
-                # If proxies keep failing, automatically try direct (unless force_proxy).
-                if category == "proxy" and not self.force_proxy:
-                    # One extra direct attempt beyond proxy budget.
-                    if attempts[category] > retry_budget.get(category, 0):
-                        try:
-                            response = requests.get(direct_url, stream=True, timeout=self.timeout)
-                            response.raise_for_status()
-                            total_length = int(response.headers.get("content-length", 0))
-                            progress.update(task_id, completed=0, total=total_length)
-                            progress.start_task(task_id)
-                            with open(temp_file, "wb") as file_obj:
-                                for chunk in response.iter_content(chunk_size=32768):
-                                    if chunk:
-                                        file_obj.write(chunk)
-                                        progress.advance(task_id, len(chunk))
-                            if total_length and os.path.getsize(temp_file) != total_length:
-                                raise DownloadPipelineError("network", f"文件大小不匹配: expected={total_length}, actual={os.path.getsize(temp_file)}")
-                            break
-                        except (DownloadPipelineError, requests.exceptions.RequestException, OSError) as direct_exc:
-                            last_error = direct_exc
-                            category = self._classify_retryable_error(direct_exc)
-                            attempts[category] = attempts.get(category, 0) + 1
-                            logger.warning("Direct download fallback failed for %s: %s", track_metadata.get("id"), direct_exc)
-
-                if attempts[category] > retry_budget.get(category, 0):
-                    hint = {
-                        "network": "网络波动，建议稍后重试。",
-                        "proxy": "代理异常：建议尝试 --direct 或调整代理池；现在会自动直连兜底。",
-                        "auth": "认证/secret 失效，建议 qdp -r 或检查 token。",
-                        "copyright": "资源受版权/地区限制，当前账号不可串流。",
-                        "io": "本地 IO/权限异常，请检查目录权限与空间。",
-                        "generic": "未知错误，请用 --debug 查看细节。",
-                    }.get(category, "下载失败")
-                    track_metadata["_download_status"] = "failed"
-                    logger.warning(
-                        "Track download exhausted retries for %s via %s (%s): %s",
-                        track_metadata.get("id"),
-                        attempt_url,
-                        category,
-                        last_error,
-                    )
-                    raise DownloadPipelineError(category, f"{category} 失败: {last_error}", hint=hint)
-
-                time.sleep(_backoff(attempts[category]))
         try:
-            if is_mp3:
-                metadata.tag_mp3(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=False)
-            else:
-                metadata.tag_flac(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=False)
-        except (MutagenError, OSError, ValueError) as exc:
-            logger.warning("Tagging failed for %s: %s", final_file, exc)
-        if os.path.exists(temp_file):
-            os.replace(temp_file, final_file)
-        track_metadata["_download_status"] = "downloaded"
-        track_metadata["_final_path"] = final_file
+            self._download_with_retry(
+                url, temp_file,
+                min_size=0,  # track files can be any size
+                progress=progress, task_id=task_id,
+            )
+        except DownloadPipelineError:
+            track_metadata["_download_status"] = "failed"
+            raise
+
+        # Pre-download cover art for single-track downloads
         if ind_cover and not self.no_cover:
             try:
-                img_url = album_or_track_metadata.get("image", {}).get("large") or track_metadata.get("album", {}).get("image", {}).get("large")
+                img_url = (album_or_track_metadata.get("image") or {}).get("large") or (track_metadata.get("album") or {}).get("image", {}).get("large")
                 if img_url:
                     track_img_path = final_file.rsplit(".", 1)[0] + ".jpg"
                     if not os.path.exists(track_img_path):
-                        _get_extra_proxy(format_proxy_url(self._get_max_quality_url(img_url)), root_dir, os.path.basename(track_img_path))
+                        self._download_extra_file(format_proxy_url(self._get_max_quality_url(img_url)), root_dir, os.path.basename(track_img_path), expected_format=None)
             except (AttributeError, OSError, requests.exceptions.RequestException) as exc:
                 logger.debug("Track cover download skipped for %s: %s", final_file, exc)
+
+        # Tag and finalize
+        rename_succeeded = False
+        try:
+            if is_mp3:
+                metadata.tag_mp3(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=self.embed_art)
+            else:
+                metadata.tag_flac(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=self.embed_art)
+        except (MutagenError, OSError, ValueError) as exc:
+            logger.warning("Tagging failed for %s: %s", final_file, exc)
+        try:
+            if os.path.exists(temp_file):
+                os.replace(temp_file, final_file)
+                rename_succeeded = True
+            track_metadata["_download_status"] = "downloaded"
+            track_metadata["_final_path"] = final_file
+        finally:
+            if rename_succeeded:
+                self._cleanup_temp_file(temp_file)
+
+    def _cleanup_temp_file(self, temp_file: str):
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except OSError:
+                logger.debug("Temporary file cleanup failed: %s", temp_file, exc_info=True)
 
     def _print_check_summary(self, content_name, reports, content_type="collection"):
         total = len(reports)
@@ -1119,14 +1388,44 @@ class Download:
             return ("Unknown", quality_met, None, None)
 
 
-def _get_extra_proxy(proxy_url, dirn, filename):
-    extra_file = os.path.join(dirn, filename)
-    if os.path.isfile(extra_file):
-        return
+def _validate_file_format(path: str, expected_format: str) -> bool:
+    """Check that *path* starts with the magic bytes for *expected_format*.
+
+    Supported formats (case-insensitive):
+      - ``'jpeg'`` / ``'jpg'``  → ``\\xFF\\xD8\\xFF``
+      - ``'png'``               → ``\\x89PNG``
+      - ``'pdf'``               → ``%PDF`` header **and** ``%%EOF`` trailer
+
+    Returns ``True`` when the header matches, ``False`` otherwise (including
+    when the file cannot be read or *expected_format* is unrecognised).
+    """
+    expected_format = (expected_format or "").lower().strip()
+    magic_map = {
+        "jpeg": b"\xFF\xD8\xFF",
+        "jpg": b"\xFF\xD8\xFF",
+        "png": b"\x89PNG",
+        "pdf": b"%PDF",
+    }
+    expected_magic = magic_map.get(expected_format)
+    if not expected_magic:
+        # Unknown format — nothing to validate against, treat as pass.
+        return True
     try:
-        response = requests.get(proxy_url, timeout=10)
-        response.raise_for_status()
-        with open(extra_file, "wb") as file_obj:
-            file_obj.write(response.content)
-    except (requests.exceptions.RequestException, OSError) as exc:
-        logger.warning("Extra asset download failed for %s: %s", extra_file, exc)
+        with open(path, "rb") as fh:
+            header = fh.read(len(expected_magic))
+        if header != expected_magic:
+            return False
+        # For PDF, also verify the trailer contains %%EOF (for files large enough
+        # to plausibly contain it; tiny stub files with a valid header are accepted).
+        if expected_format == "pdf":
+            file_size = os.path.getsize(path)
+            if file_size < 16:
+                return True  # tiny stub — header match is sufficient
+            trailer_size = min(1024, file_size)
+            with open(path, "rb") as fh:
+                fh.seek(file_size - trailer_size)
+                trailer = fh.read()
+            return b"%%EOF" in trailer or file_size < 512
+        return True
+    except OSError:
+        return False
