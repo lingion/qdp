@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 
 from qdp.bundle import Bundle
@@ -24,6 +25,8 @@ QOBUZ_DB = os.path.join(CONFIG_PATH, "qdp.db")
 
 ANDROID_APP_ID = "798273057"
 ANDROID_SECRET = "abb21364945c0583309667d13ca3d93a"
+ANDROID_NEW_APP_ID = "312369995"
+ANDROID_NEW_SECRET = "e79f8b9be485692b0e5f9dd895826368"
 
 # 莫兰迪柔和配色
 C_TITLE = "#8e9aaf"
@@ -104,9 +107,9 @@ def _prompt_with_default(console: Console, label, default_value, secret=False):
     shown = default_value if default_value not in (None, "") else ""
     if secret and shown:
         masked = "*" * min(max(len(str(shown)), 8), 12)
-        suffix = f" [{masked}]"
+        suffix = f" ({masked})"
     else:
-        suffix = f" [{shown}]" if shown else ""
+        suffix = f" ({escape(str(shown))})" if shown else ""
     prompt = f"{label}{suffix}: "
     value = console.input(prompt).strip()
     return value if value else (default_value or "")
@@ -141,22 +144,22 @@ def _mask_value(value):
 def build_config_preview(config_defaults: Dict[str, str]) -> str:
     lines = [
         f"登录方式: {'Token' if config_defaults.get('use_token') == 'true' else '邮箱/密码'}",
-        f"邮箱: {_mask_value(config_defaults.get('email')) if config_defaults.get('use_token') != 'true' else '未使用'}",
-        f"密码: {_mask_value(config_defaults.get('password')) if config_defaults.get('use_token') != 'true' else '未使用'}",
-        f"User ID: {_mask_value(config_defaults.get('user_id'))}",
-        f"Token: {_mask_value(config_defaults.get('user_auth_token'))}",
-        f"App ID: {_mask_value(config_defaults.get('app_id'))}",
+        f"邮箱: {escape(_mask_value(config_defaults.get('email'))) if config_defaults.get('use_token') != 'true' else '未使用'}",
+        f"密码: {escape(_mask_value(config_defaults.get('password'))) if config_defaults.get('use_token') != 'true' else '未使用'}",
+        f"User ID: {escape(_mask_value(config_defaults.get('user_id')))}",
+        f"Token: {escape(_mask_value(config_defaults.get('user_auth_token')))}",
+        f"App ID: {escape(str(config_defaults.get('app_id')))}",
         f"Secrets: {'已配置' if config_defaults.get('secrets') else '未配置'}",
-        f"下载目录: {config_defaults.get('default_folder')}",
-        f"专辑命名: {config_defaults.get('folder_format')}",
-        f"曲目命名: {config_defaults.get('track_format')}",
+        f"下载目录: {escape(str(config_defaults.get('default_folder')))}",
+        f"专辑命名: {escape(str(config_defaults.get('folder_format')))}",
+        f"曲目命名: {escape(str(config_defaults.get('track_format')))}",
         f"默认画质: {config_defaults.get('default_quality')}",
         f"搜索每页数量: {config_defaults.get('default_limit')}",
         f"workers: {config_defaults.get('workers')} | prefetch_workers: {config_defaults.get('prefetch_workers') or '跟随 workers'}",
         f"url_rate: {config_defaults.get('url_rate')} | timeout: {config_defaults.get('timeout')} | max_retries: {config_defaults.get('max_retries')}",
         f"force_proxy: {config_defaults.get('force_proxy')}",
-        f"region: {config_defaults.get('region', '--')} | expiry: {config_defaults.get('expiry_date', '') or '未记录'} | label: {config_defaults.get('label', '') or '未记录'}",
-        f"代理池: {_mask_value(config_defaults.get('proxies')) if config_defaults.get('proxies') else '未配置'}",
+        f"region: {escape(str(config_defaults.get('region', '--')))} | expiry: {escape(str(config_defaults.get('expiry_date', '') or '未记录'))} | label: {escape(str(config_defaults.get('label', '') or '未记录'))}",
+        f"代理池: {escape(_mask_value(config_defaults.get('proxies'))) if config_defaults.get('proxies') else '未配置'}",
         f"原图封面: {config_defaults.get('og_cover')}",
         f"下载 booklet: {'false' if config_defaults.get('no_booklet') == 'true' else 'true'}",
         f"默认完整性修复: {config_defaults.get('verify_existing')}",
@@ -197,12 +200,27 @@ def collect_config(console: Console, previous: Dict[str, str]) -> configparser.C
         config['DEFAULT']['expiry_date'] = _prompt_with_default(console, '到期日期(YYYY-MM-DD，可空)', previous.get('expiry_date', ''))
         console.print(f"\n[{C_OPT}]密钥类型:[/{C_OPT}]")
         console.print('[1] 网页密钥 (自动抓取)')
-        console.print('[2] 安卓密钥 (推荐)')
-        secret_default = '2' if previous.get('app_id') == ANDROID_APP_ID else '1'
+        console.print('[2] 安卓密钥 v1 (旧版 Token)')
+        console.print('[3] 安卓密钥 v2 (新版 Token, 推荐)')
+        console.print('[4] 自定义 App ID + Secret')
+        if previous.get('app_id') == ANDROID_APP_ID:
+            secret_default = '2'
+        elif previous.get('app_id') == ANDROID_NEW_APP_ID:
+            secret_default = '3'
+        elif previous.get('app_id') and previous.get('secrets') and previous.get('app_id') not in {ANDROID_APP_ID, ANDROID_NEW_APP_ID}:
+            secret_default = '4'
+        else:
+            secret_default = '3'
         key_choice = _prompt_with_default(console, '请选择', secret_default)
         if key_choice == '2':
             config['DEFAULT']['app_id'] = ANDROID_APP_ID
             config['DEFAULT']['secrets'] = ANDROID_SECRET
+        elif key_choice == '3':
+            config['DEFAULT']['app_id'] = ANDROID_NEW_APP_ID
+            config['DEFAULT']['secrets'] = ANDROID_NEW_SECRET
+        elif key_choice == '4':
+            config['DEFAULT']['app_id'] = _prompt_with_default(console, '自定义 App ID', previous.get('app_id', ''))
+            config['DEFAULT']['secrets'] = _prompt_with_default(console, '自定义 Secret', previous.get('secrets', ''), secret=True)
         else:
             try:
                 bundle = Bundle()
@@ -218,8 +236,8 @@ def collect_config(console: Console, previous: Dict[str, str]) -> configparser.C
         config['DEFAULT']['use_token'] = 'false'
         config['DEFAULT']['email'] = _prompt_with_default(console, '邮箱', previous.get('email', ''))
         config['DEFAULT']['password'] = _prompt_with_default(console, '密码', previous.get('password', ''), secret=True)
-        config['DEFAULT']['app_id'] = previous.get('app_id', ANDROID_APP_ID) or ANDROID_APP_ID
-        config['DEFAULT']['secrets'] = previous.get('secrets', ANDROID_SECRET) or ANDROID_SECRET
+        config['DEFAULT']['app_id'] = previous.get('app_id', ANDROID_NEW_APP_ID) or ANDROID_NEW_APP_ID
+        config['DEFAULT']['secrets'] = previous.get('secrets', ANDROID_NEW_SECRET) or ANDROID_NEW_SECRET
         config['DEFAULT']['user_id'] = ''
         config['DEFAULT']['user_auth_token'] = ''
         config['DEFAULT']['region'] = _prompt_with_default(console, '地区/区域(例如 US/JP)', previous.get('region', '--'))
@@ -227,7 +245,7 @@ def collect_config(console: Console, previous: Dict[str, str]) -> configparser.C
         config['DEFAULT']['label'] = previous.get('label', '')
 
     console.rule(f"[{C_TITLE}]路径与命名[/{C_TITLE}]")
-    console.print(f"[{C_HINT}]当前目录: {os.getcwd()}[/{C_HINT}]")
+    console.print(f"[{C_HINT}]当前目录:[/{C_HINT}] {escape(os.getcwd())}")
     config['DEFAULT']['default_folder'] = _prompt_with_default(console, '下载目录', previous.get('default_folder', 'Qobuz Downloads'))
     folder_templates = {'1': '{artist} - {album} ({year})', '2': '{artist} - {album} ({year}) [{bit_depth}B-{sampling_rate}kHz]', '3': '{year} - {album}'}
     config['DEFAULT']['folder_format'] = _prompt_template(console, '专辑文件夹命名规则', previous.get('folder_format', DEFAULT_SETTINGS['folder_format']), folder_templates)
