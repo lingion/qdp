@@ -53,18 +53,26 @@ def _format_genres(genres: list) -> str:
 def _find_cover(root_dir, final_name):
     """
     智能寻找封面图片：
-    1. 优先找与音频同名的 .jpg 文件 (适合歌单模式)
-    2. 其次找当前目录下的 cover.jpg (适合专辑模式)
-    3. 最后尝试父目录下的 cover.jpg (适合 Disc 1/Disc 2 专辑子目录)
+    1. 优先找与音频同名的图片文件 (.jpg/.jpeg/.png) (适合歌单模式)
+    2. 其次找当前目录下的 cover 图片 (cover.jpg/cover.png) (适合专辑模式)
+    3. 最后尝试父目录下的 cover 图片 (适合 Disc 1/Disc 2 专辑子目录)
     """
     options = []
-    # 1. 同名图片路径
+    # 1. 同名图片路径（尝试 jpg 和 png）
     if final_name:
-        options.append(os.path.splitext(final_name)[0] + ".jpg")
-    # 2. 当前目录 cover.jpg
+        base = os.path.splitext(final_name)[0]
+        options.append(base + ".jpg")
+        options.append(base + ".jpeg")
+        options.append(base + ".png")
+    # 2. 当前目录 cover 图片
     options.append(os.path.join(root_dir, "cover.jpg"))
-    # 3. 上级目录 cover.jpg
-    options.append(os.path.join(os.path.abspath(os.path.join(root_dir, os.pardir)), "cover.jpg"))
+    options.append(os.path.join(root_dir, "cover.jpeg"))
+    options.append(os.path.join(root_dir, "cover.png"))
+    # 3. 上级目录 cover 图片
+    parent = os.path.abspath(os.path.join(root_dir, os.pardir))
+    options.append(os.path.join(parent, "cover.jpg"))
+    options.append(os.path.join(parent, "cover.jpeg"))
+    options.append(os.path.join(parent, "cover.png"))
 
     for opt in options:
         if os.path.isfile(opt):
@@ -74,29 +82,73 @@ def _find_cover(root_dir, final_name):
 def _embed_flac_img(root_dir, audio: FLAC, final_name):
     cover_image = _find_cover(root_dir, final_name)
     if not cover_image:
+        logger.debug("FLAC 封面嵌入跳过: 未找到封面文件 (root=%s, name=%s)", root_dir, final_name)
         return
 
     try:
-        if os.getsize(cover_image) > FLAC_MAX_BLOCKSIZE:
-            return 
-        image = Picture()
-        image.type = 3
-        image.mime = "image/jpeg"
-        image.desc = "cover"
+        file_size = os.path.getsize(cover_image)
+        if file_size < 64:
+            logger.warning("FLAC 封面嵌入跳过: 封面文件过小 (%d bytes): %s", file_size, cover_image)
+            return
+        if file_size > FLAC_MAX_BLOCKSIZE:
+            logger.warning("FLAC 封面嵌入跳过: 封面文件超过 FLAC 最大块大小 (%d bytes): %s", file_size, cover_image)
+            return
+
         with open(cover_image, "rb") as img:
-            image.data = img.read()
+            img_data = img.read()
+
+        # 验证 JPEG/PNG 魔数
+        if img_data[:3] == b'\xff\xd8\xff':
+            mime = "image/jpeg"
+        elif img_data[:4] == b'\x89PNG':
+            mime = "image/png"
+        else:
+            logger.warning("FLAC 封面嵌入跳过: 封面文件格式无效 (非 JPEG/PNG): %s", cover_image)
+            return
+
+        # 清除已有封面，避免重复嵌入（重试时不会叠加）
+        audio.clear_pictures()
+
+        image = Picture()
+        image.type = 3  # Cover (front)
+        image.mime = mime
+        image.desc = "cover"
+        image.data = img_data
         audio.add_picture(image)
+        logger.debug("FLAC 封面嵌入成功: %s (%d bytes, %s)", cover_image, file_size, mime)
     except (OSError, ValueError, TypeError) as exc:
         logger.warning("FLAC 封面嵌入失败: %s", exc)
 
 def _embed_id3_img(root_dir, audio: id3.ID3, final_name):
     cover_image = _find_cover(root_dir, final_name)
     if not cover_image:
+        logger.debug("ID3 封面嵌入跳过: 未找到封面文件 (root=%s, name=%s)", root_dir, final_name)
         return
 
     try:
+        file_size = os.path.getsize(cover_image)
+        if file_size < 64:
+            logger.warning("ID3 封面嵌入跳过: 封面文件过小 (%d bytes): %s", file_size, cover_image)
+            return
+
         with open(cover_image, "rb") as cover:
-            audio.add(id3.APIC(3, "image/jpeg", 3, "", cover.read()))
+            img_data = cover.read()
+
+        # 验证 JPEG/PNG 魔数
+        if img_data[:3] == b'\xff\xd8\xff':
+            mime = "image/jpeg"
+        elif img_data[:4] == b'\x89PNG':
+            mime = "image/png"
+        else:
+            logger.warning("ID3 封面嵌入跳过: 封面文件格式无效 (非 JPEG/PNG): %s", cover_image)
+            return
+
+        # 删除已有 APIC 帧，避免重复嵌入
+        if "APIC" in audio:
+            del audio["APIC"]
+
+        audio.add(id3.APIC(3, mime, 3, "cover", img_data))
+        logger.debug("ID3 封面嵌入成功: %s (%d bytes, %s)", cover_image, file_size, mime)
     except (OSError, ValueError, TypeError) as exc:
         logger.warning("ID3 封面嵌入失败: %s", exc)
 
@@ -124,6 +176,11 @@ def tag_flac(filename, root_dir, final_name, d: dict, album, istrack=True, em_im
     """给 FLAC 文件写入标签"""
     try:
         audio = FLAC(filename)
+    except Exception as e:
+        logger.error(f"FLAC 打开失败 (无法解析): {filename}: {e}")
+        return
+
+    try:
         audio["TITLE"] = _get_title(d)
         audio["TRACKNUMBER"] = str(d.get("track_number", 0))
         if int(d.get("media_number", 1) or 1) > 1:
@@ -145,12 +202,17 @@ def tag_flac(filename, root_dir, final_name, d: dict, album, istrack=True, em_im
         if quality_payload:
             audio["QDP_QUALITY"] = quality_payload
 
+        # Cover art embedding — isolated so a cover failure doesn't kill the tags
         if em_image:
-            _embed_flac_img(root_dir, audio, final_name)
+            try:
+                _embed_flac_img(root_dir, audio, final_name)
+            except Exception as cover_exc:
+                logger.warning("FLAC 封面嵌入失败 (标签仍会写入): %s", cover_exc)
 
         audio.save()
     except Exception as e:
-        logger.error(f"FLAC 标签写入失败: {e}")
+        logger.error(f"FLAC 标签写入失败: {filename}: {e}")
+
 
 def tag_mp3(filename, root_dir, final_name, d, album, istrack=True, em_image=False):
     """给 MP3 文件写入标签"""
@@ -159,7 +221,11 @@ def tag_mp3(filename, root_dir, final_name, d, album, istrack=True, em_image=Fal
             audio = id3.ID3(filename)
         except ID3NoHeaderError:
             audio = id3.ID3()
+    except Exception as e:
+        logger.error(f"MP3 ID3 打开失败: {filename}: {e}")
+        return
 
+    try:
         curr_album = d.get("album", album)
         tags = {
             "title": _get_title(d),
@@ -185,9 +251,13 @@ def tag_mp3(filename, root_dir, final_name, d, album, istrack=True, em_image=Fal
         if quality_payload:
             audio.add(id3.TXXX(encoding=3, desc="QDP_QUALITY", text=quality_payload))
 
+        # Cover art embedding — isolated so a cover failure doesn't kill the tags
         if em_image:
-            _embed_id3_img(root_dir, audio, final_name)
+            try:
+                _embed_id3_img(root_dir, audio, final_name)
+            except Exception as cover_exc:
+                logger.warning("MP3 封面嵌入失败 (标签仍会写入): %s", cover_exc)
 
         audio.save(filename, "v2_version=3")
     except Exception as e:
-        logger.error(f"MP3 标签写入失败: {e}")
+        logger.error(f"MP3 标签写入失败: {filename}: {e}")
