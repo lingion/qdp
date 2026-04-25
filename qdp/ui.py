@@ -14,6 +14,7 @@ from qdp.accounts import create_account_record, delete_account, format_account_d
 from qdp.config import CONFIG_FILE, DEFAULT_SETTINGS, QOBUZ_DB, initial_checks, load_config, load_config_defaults, run_config_wizard, save_config
 from qdp.core import QobuzDL
 from qdp.db import iter_download_entries
+from qdp.exceptions import AuthenticationError, InvalidAppIdError, InvalidAppSecretError, AppSecretValidationProxyError
 from qdp.integrity import discover_library_albums
 from qdp.ui_compound import CompoundAction, build_plan, choose_action, confirm_execution, run_plan
 from qdp.ui_models import SelectionSet, UIItem, UIItemKind
@@ -149,7 +150,7 @@ def _account_status_from_exception(exc: Exception) -> tuple[str, str]:
 def _refresh_account_profile(account_name: str, console: Console, test_availability: bool = False, progress: str = ''):
     prefix = f'{progress}: ' if progress else ''
     mode_text = '测试账号' if test_availability else '刷新资料'
-    console.print(f'[{C_DIM}]{prefix}正在{mode_text}: {account_name}[/]')
+    console.print(f'[{C_DIM}]{prefix}正在{mode_text}:[/] {account_name}')
     switch_account(account_name, CONFIG_FILE)
     latest = load_config_defaults(CONFIG_FILE)
     q = build_qobuz_from_defaults(latest)
@@ -236,7 +237,7 @@ def _ui_account_center(console: Console, defaults: Dict[str, str]) -> bool:
             except Exception as exc:
                 status, detail = _account_status_from_exception(exc)
                 update_account_meta(active or 'default', {'status': status, 'status_detail': detail}, CONFIG_FILE)
-                console.print(f'[red]当前账号测试失败：{exc}[/]')
+                console.print(f'[red]当前账号测试失败：[/]{exc}')
                 state_changed = True
             _pause(console)
             continue
@@ -246,7 +247,7 @@ def _ui_account_center(console: Console, defaults: Dict[str, str]) -> bool:
                 console.print('[green]当前账号资料已刷新。[/]')
                 state_changed = True
             except Exception as exc:
-                console.print(f'[red]当前账号资料刷新失败：{exc}[/]')
+                console.print(f'[red]当前账号资料刷新失败：[/]{exc}')
             _pause(console)
             continue
         if raw in {'T', 'U'}:
@@ -264,7 +265,7 @@ def _ui_account_center(console: Console, defaults: Dict[str, str]) -> bool:
                     if mode_test:
                         status, detail = _account_status_from_exception(exc)
                         update_account_meta(name, {'status': status, 'status_detail': detail}, CONFIG_FILE)
-                    console.print(f'[red]{progress}: {name} 失败：{exc}[/]')
+                    console.print(f'[red]{progress}:[/]', str(name), '失败：', str(exc))
                     state_changed = True
             if original_active:
                 try:
@@ -281,7 +282,7 @@ def _ui_account_center(console: Console, defaults: Dict[str, str]) -> bool:
                 old_name = accounts[int(target)-1][0]
                 new_name = (console.input(f'新名称 [{old_name}]: ') or '').strip() or old_name
                 rename_account(old_name, new_name, CONFIG_FILE)
-                console.print(f'[green]已重命名为 {new_name}[/]')
+                console.print(f'[green]已重命名为[/] {new_name}')
                 state_changed = True
                 _pause(console)
             continue
@@ -300,7 +301,7 @@ def _ui_account_center(console: Console, defaults: Dict[str, str]) -> bool:
             if target.isdigit() and 1 <= int(target) <= len(accounts):
                 name = accounts[int(target)-1][0]
                 delete_account(name, CONFIG_FILE)
-                console.print(f'[yellow]已删除账号 {name}[/]')
+                console.print(f'[yellow]已删除账号[/] {name}')
                 state_changed = True
                 _pause(console)
             continue
@@ -308,7 +309,7 @@ def _ui_account_center(console: Console, defaults: Dict[str, str]) -> bool:
             name = accounts[int(raw)-1][0]
             switch_account(name, CONFIG_FILE)
             defaults.update(load_config_defaults(CONFIG_FILE))
-            console.print(f'[green]已切换到账号: {name}[/]')
+            console.print(f'[green]已切换到账号:[/] {name}')
             state_changed = True
             _pause(console)
             continue
@@ -328,9 +329,10 @@ def _menu(console: Console, breadcrumb: str, qobuz: QobuzDL, defaults: Dict[str,
         table.add_row("5", "账号中心 (快速切换多个账号)")
         table.add_row("6", "最近操作 / 结果摘要")
         table.add_row("w", "Web Player (本地 play.qobuz.com)")
+        table.add_row("a", "Apple Player (Apple 风格 UI)")
         table.add_row("q", "退出")
         console.print(table)
-        console.print(f"[{C_DIM}]快捷键: 1-6 / w(web) / q[/]")
+        console.print(f"[{C_DIM}]快捷键: 1-6 / w(web) / a(apple) / q[/]")
         choice = (console.input("选择: ") or "").strip().lower()
         if choice in {"q", "0"}:
             return
@@ -361,11 +363,22 @@ def _menu(console: Console, breadcrumb: str, qobuz: QobuzDL, defaults: Dict[str,
             try:
                 from qdp.web.server import start_web_player
                 url = start_web_player()
-                console.print(f"[green]Web Player 已启动：{url}[/]")
+                console.print(f"[green]Web Player 已启动：[/]{url}")
                 console.print(f"[{C_DIM}]已在浏览器打开（如果没弹出来就手动复制上面的链接）。[/]")
                 webbrowser.open(url)
             except Exception as exc:
-                console.print(f"[red]启动 Web Player 失败：{exc}[/]")
+                console.print(f"[red]启动 Web Player 失败：[/]{exc}")
+            _pause(console)
+        elif choice in {"a", "apple"}:
+            try:
+                from qdp.web.server import start_web_player
+                url = start_web_player()
+                apple_url = url.rstrip("/") + "/apple/"
+                console.print(f"[green]Apple Player 已启动：[/]{apple_url}")
+                console.print(f"[{C_DIM}]已在浏览器打开（如果没弹出来就手动复制上面的链接）。[/]")
+                webbrowser.open(apple_url)
+            except Exception as exc:
+                console.print(f"[red]启动 Apple Player 失败：[/]{exc}")
             _pause(console)
 
 
@@ -551,21 +564,102 @@ def _normalize_proxies_input(raw: str) -> str:
     return ','.join(proxy_list)
 
 
+def _test_all_proxies(console: Console, proxies: list):
+    """Test all proxies concurrently via HTTP GET and record results."""
+    import time as _time
+    import requests as _requests
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+    from qdp.proxy_stats import record_test_result
+
+    _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    results: Dict[str, tuple] = {}
+
+    def _test_one(url):
+        try:
+            start = _time.monotonic()
+            resp = _requests.get(url.rstrip('/') + '/', timeout=10, headers={"User-Agent": _UA})
+            latency_ms = (_time.monotonic() - start) * 1000
+            ok = 200 <= resp.status_code < 500
+            return url, ok, latency_ms
+        except Exception:
+            return url, False, 0.0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn(f'[{C_DIM}]{{task.description}}[/{C_DIM}]'),
+        BarColumn(bar_width=20),
+        TextColumn(f'[{C_DIM}]{{task.completed}}/{{task.total}}[/{C_DIM}]'),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task('测试代理连通性...', total=len(proxies))
+        with ThreadPoolExecutor(max_workers=min(10, len(proxies))) as executor:
+            futures = {executor.submit(_test_one, p): p for p in proxies}
+            for future in as_completed(futures):
+                url, ok, latency_ms = future.result()
+                try:
+                    record_test_result(url, ok, latency_ms)
+                except Exception:
+                    pass
+                results[url] = (ok, latency_ms)
+                progress.advance(task)
+
+    # Summary
+    ok_count = sum(1 for ok, _ in results.values() if ok)
+    console.print(f'[{C_OK}]测试完成: {ok_count}/{len(proxies)} 可用[/]')
+    for url, (ok, latency_ms) in results.items():
+        status = f'[{C_OK}]✓[/{C_OK}]' if ok else '[red]✗[/red]'
+        lat = f'{latency_ms:.0f}ms' if latency_ms > 0 else '--'
+        console.print(f'  {status} {url}  [{C_DIM}]{lat}[/{C_DIM}]')
+    _pause(console)
+
+
 def _ui_proxy_pool_editor(console: Console, working: Dict[str, str]) -> bool:
     changed = False
     while True:
         proxies = [p.strip() for p in (working.get('proxies', '') or '').split(',') if p.strip()]
         console.clear(); _header(console, breadcrumb='Dashboard > Settings > Proxy Pool')
+
+        # Load persistent stats
+        try:
+            from qdp.proxy_stats import load_stats as _load_stats
+            all_stats = _load_stats()
+        except Exception:
+            all_stats = {}
+
         table = Table(title='代理池', border_style=C_BORDER)
         table.add_column('编号', justify='right', style=C_DIM)
         table.add_column('节点')
+        table.add_column('状态', justify='center')
+        table.add_column('延迟', justify='right')
+        table.add_column('成功率', justify='right')
+        table.add_column('最后检查', style=C_DIM)
         if proxies:
             for idx, proxy in enumerate(proxies, start=1):
-                table.add_row(str(idx), proxy)
+                stat = all_stats.get(proxy)
+                if stat and stat.total > 0:
+                    if stat.success_rate >= 0.8:
+                        status = f'[{C_OK}]✓[/{C_OK}]'
+                    elif stat.success_rate >= 0.5:
+                        status = f'[{C_WARN}]![{C_WARN}]'
+                    else:
+                        status = '[red]✗[/red]'
+                    latency = f'{stat.avg_latency_ms:.0f}ms' if stat.avg_latency_ms > 0 else '--'
+                    rate = f'{stat.success_rate * 100:.1f}%'
+                    last_check = stat.last_success or stat.last_failure or '--'
+                    if last_check != '--' and 'T' in last_check:
+                        last_check = last_check.split('T')[1]
+                else:
+                    status = f'[{C_DIM}]--[/{C_DIM}]'
+                    latency = '--'
+                    rate = '--'
+                    last_check = '--'
+                table.add_row(str(idx), proxy, status, latency, rate, last_check)
         else:
-            table.add_row('-', '当前没有代理节点，默认直连')
+            table.add_row('-', '当前没有代理节点，默认直连', '', '', '', '')
         console.print(table)
-        console.print(f'[{C_DIM}]a 新增 | d 删除 | c 清空 | b 返回[/]')
+        console.print(f'[{C_DIM}]a 新增 | d 删除 | c 清空 | t 测试全部 | b 返回[/]')
         choice = (console.input('选择: ') or '').strip().lower()
         if choice in {'b', 'q', '0'}:
             return changed
@@ -601,6 +695,13 @@ def _ui_proxy_pool_editor(console: Console, working: Dict[str, str]) -> bool:
             if touched:
                 working['proxies'] = ','.join(proxies)
                 changed = True
+            continue
+        if choice == 't':
+            if not proxies:
+                console.print('[yellow]没有代理可测试。[/]')
+                _pause(console)
+                continue
+            _test_all_proxies(console, proxies)
             continue
 
 
@@ -673,5 +774,71 @@ def run_ui(argv_entry: str = 'qdp'):
     initial_checks(console=console, config_file=CONFIG_FILE)
     defaults = load_config_defaults(CONFIG_FILE)
     qobuz = build_qobuz_from_defaults(defaults)
-    initialize_qobuz_client(qobuz, defaults)
+    try:
+        initialize_qobuz_client(qobuz, defaults)
+    except AppSecretValidationProxyError as exc:
+        console.print(f"\n[red]⚠ 登录失败:[/] {exc}")
+        console.print("[yellow]当前更像是 Worker / 代理链路异常，不建议立刻运行 qdp -r。[/]")
+        console.print("[yellow]请优先检查代理池、Worker、网络环境，然后再重试。[/]")
+        console.print("[1] 重新配置  [2] 重试登录  [0] 退出")
+        choice = (console.input("请选择: ") or "").strip()
+        if choice == "1":
+            try:
+                run_config_wizard(console=console, config_file=CONFIG_FILE)
+                defaults = load_config_defaults(CONFIG_FILE)
+                qobuz = build_qobuz_from_defaults(defaults)
+                initialize_qobuz_client(qobuz, defaults)
+            except AppSecretValidationProxyError as exc2:
+                console.print(f"[red]配置后仍然失败：[/]{exc2}")
+                console.print("[yellow]这依然更像代理/Worker 问题，不是账号信息本身错误。[/]")
+                return
+            except (AuthenticationError, InvalidAppIdError, InvalidAppSecretError):
+                console.print("[red]配置后仍然登录失败。请检查账号信息或凭证是否正确。[/]")
+                return
+            except Exception as exc2:
+                console.print(f"[red]网络异常：[/]{exc2}")
+                console.print("[yellow]配置已保存。请检查网络后重新运行 qdp。[/]")
+                return
+        elif choice == "2":
+            try:
+                initialize_qobuz_client(qobuz, defaults)
+            except AppSecretValidationProxyError as exc2:
+                console.print(f"[red]重试仍然失败：[/]{exc2}")
+                console.print("[yellow]当前仍像代理/Worker 对播放授权接口的拦截，不是单纯账号错误。[/]")
+                return
+            except (AuthenticationError, InvalidAppIdError, InvalidAppSecretError):
+                console.print("[red]重试仍然失败。请检查账号信息或凭证。[/]")
+                return
+            except Exception as exc2:
+                console.print(f"[red]网络异常：[/]{exc2}")
+                console.print("[yellow]请检查网络后重新运行 qdp。[/]")
+                return
+        else:
+            return
+    except (AuthenticationError, InvalidAppIdError, InvalidAppSecretError) as exc:
+        console.print(f"\n[red]⚠ 登录失败:[/] {exc}")
+        console.print("[yellow]这更像是凭证/App Secret 本身问题，可考虑运行 qdp -r。[/]")
+        console.print("[1] 重新配置  [2] 重试登录  [0] 退出")
+        choice = (console.input("请选择: ") or "").strip()
+        if choice == "1":
+            try:
+                run_config_wizard(console=console, config_file=CONFIG_FILE)
+                defaults = load_config_defaults(CONFIG_FILE)
+                qobuz = build_qobuz_from_defaults(defaults)
+                initialize_qobuz_client(qobuz, defaults)
+            except Exception as exc2:
+                console.print(f"[red]配置后仍然失败：[/]{exc2}")
+                return
+        elif choice == "2":
+            try:
+                initialize_qobuz_client(qobuz, defaults)
+            except Exception as exc2:
+                console.print(f"[red]重试仍然失败：[/]{exc2}")
+                return
+        else:
+            return
+    except Exception as exc:
+        console.print(f"\n[red]⚠ 网络异常：[/]{exc}")
+        console.print("[yellow]配置已保存。请检查网络连接后重新运行 qdp。[/]")
+        return
     _menu(console, breadcrumb=argv_entry, qobuz=qobuz, defaults=defaults)

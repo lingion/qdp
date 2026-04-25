@@ -3,11 +3,13 @@ import logging
 import os
 import sys
 
+import requests
 from rich.console import Console
 
 from qdp.commands import build_parser
 from qdp.config import CONFIG_FILE, DEFAULT_SETTINGS, QOBUZ_DB, initial_checks, load_config_defaults, remove_leftovers, run_config_wizard
 from qdp.core import QobuzDL
+from qdp.exceptions import AppSecretValidationProxyError, AuthenticationError, InvalidAppIdError, InvalidAppSecretError
 from qdp.ui import run_ui
 from qdp.utils import set_direct_mode
 
@@ -159,6 +161,22 @@ def main(argv=None):
             qobuz.download_list_of_urls(args.urls)
     except KeyboardInterrupt:
         console.print("\n[red]用户强制停止。[/]")
+    except AppSecretValidationProxyError as exc:
+        console.print(f"\n[red]⚠ App Secret 校验失败:[/] {exc}")
+        console.print("[yellow]这更像是代理/worker/网络问题，而不是凭证失效。请先检查代理池、worker 状态或网络连通性；不要直接运行 'qdp -r'。[/]")
+        return 1
+    except (AuthenticationError, InvalidAppIdError, InvalidAppSecretError) as exc:
+        console.print(f"\n[red]⚠ 登录失败:[/] {exc}")
+        console.print("[yellow]凭证或签名可能已过期。请运行 'qdp -r' 重新配置凭证。[/]")
+        return 1
+    except requests.exceptions.RequestException as exc:
+        console.print(f"\n[red]⚠ 网络异常:[/] {exc}")
+        console.print("[yellow]请检查网络连接、代理池或上游服务状态后重试。[/]")
+        return 1
+    except Exception as exc:
+        console.print(f"\n[red]⚠ 运行异常:[/] {exc}")
+        console.print("[yellow]请检查网络连接、代理/worker 状态和本地配置后重试。[/]")
+        return 1
     finally:
         try:
             remove_leftovers(qobuz.directory)

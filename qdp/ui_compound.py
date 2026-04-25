@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -134,7 +135,7 @@ def run_plan(
             except KeyboardInterrupt:
                 raise
             except Exception as exc:
-                console.print(Panel.fit(f"批量执行失败: {exc}", title="错误", border_style="red"))
+                console.print(Panel.fit(f"批量执行失败: {escape(str(exc))}", title="错误", border_style="red"))
                 stats["failed"] += len(urls)
         # Any non-url items are skipped for these actions.
         stats["skipped"] += len([it for it in plan.items if it.kind != UIItemKind.URL])
@@ -149,7 +150,7 @@ def run_plan(
         except KeyboardInterrupt:
             raise
         except Exception as exc:
-            console.print(Panel.fit(f"执行失败: {item.label}\n{exc}", title="错误", border_style="red"))
+            console.print(Panel.fit(f"执行失败: {escape(item.label)}\n{escape(str(exc))}", title="错误", border_style="red"))
             stats["failed"] += 1
     return stats
 
