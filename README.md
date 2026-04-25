@@ -170,6 +170,10 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 ![qdp webapp preview](docs/screenshots/webapp-home.jpg)
 
+### TUI Preview
+
+![qdp TUI search](docs/screenshots/tui-search.svg)
+
 
 ## Maintained By
 
