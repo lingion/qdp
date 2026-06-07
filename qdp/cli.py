@@ -1,3 +1,4 @@
+import argparse
 import configparser
 import logging
 import os
@@ -14,6 +15,73 @@ from qdp.utils import set_direct_mode
 console = Console()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+
+# Keys that are masked by default in `config list` / `config get`
+_SECRET_KEYS = {"password", "secrets", "user_auth_token"}
+# All valid config keys
+_VALID_KEYS = {
+    "email", "password", "app_id", "secrets", "use_token", "user_id",
+    "user_auth_token", "default_folder", "default_quality", "default_limit",
+    "folder_format", "track_format", "proxies", "embed_art", "no_cover",
+    "og_cover", "albums_only", "no_m3u", "no_fallback", "smart_discography",
+    "force_proxy", "workers", "prefetch_workers", "max_retries", "timeout",
+    "url_rate", "debug",
+}
+
+
+def _handle_config_command(args):
+    """Handle `qdp config set|get|list` — non-interactive config management."""
+    cmd = getattr(args, "config_command", None)
+    if not cmd:
+        console.print("[yellow]用法: qdp config set key=val | qdp config get [key] | qdp config list[/]")
+        return 0
+
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    # DEFAULT section always exists in ConfigParser, no need to add
+
+    if cmd == "set":
+        for pair in args.pairs:
+            if "=" not in pair:
+                console.print(f"[red]格式错误: {pair}（需要 key=value）[/]")
+                return 1
+            key, _, value = pair.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if key not in _VALID_KEYS:
+                console.print(f"[yellow]警告: '{key}' 不是已知配置项，但仍写入。已知项: {', '.join(sorted(_VALID_KEYS))}[/]")
+            config["DEFAULT"][key] = value
+            display = "***" if key in _SECRET_KEYS else value
+            console.print(f"  {key} = {display}")
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        with open(CONFIG_FILE, "w") as f:
+            config.write(f)
+        console.print(f"[green]配置已保存到 {CONFIG_FILE}[/]")
+        return 0
+
+    elif cmd == "get":
+        keys = args.keys if args.keys else list(config["DEFAULT"].keys())
+        for key in keys:
+            value = config["DEFAULT"].get(key, "")
+            if not value:
+                console.print(f"  {key} = [dim](未设置)[/]")
+            elif key in _SECRET_KEYS:
+                console.print(f"  {key} = {'*' * min(8, max(4, len(value)))}")
+            else:
+                console.print(f"  {key} = {value}")
+        return 0
+
+    elif cmd == "list":
+        show_secrets = getattr(args, "show_secrets", False)
+        for key in sorted(config["DEFAULT"].keys()):
+            value = config["DEFAULT"][key]
+            if key in _SECRET_KEYS and not show_secrets:
+                value = "*" * min(8, max(4, len(value)))
+            console.print(f"  {key} = {value}")
+        return 0
+
+    return 0
 
 
 def _to_int(val, fallback):
@@ -49,6 +117,21 @@ def main(argv=None):
         from qdp import __version__
         console.print(f"qdp {__version__}")
         return 0
+
+    # `qdp config set|get|list` — non-interactive, works without any config
+    if argv and argv[0] == "config":
+        # Build a dedicated parser for the config subcommand
+        config_parser = argparse.ArgumentParser(prog="qdp config")
+        config_sub = config_parser.add_subparsers(dest="config_command")
+        cs_set = config_sub.add_parser("set", help="设置配置项")
+        cs_set.add_argument("pairs", nargs="+", metavar="KEY=VALUE")
+        cs_get = config_sub.add_parser("get", help="查看配置项")
+        cs_get.add_argument("keys", nargs="*", metavar="KEY")
+        cs_list = config_sub.add_parser("list", help="列出所有配置项")
+        cs_list.add_argument("--show-secrets", action="store_true")
+        config_args = config_parser.parse_args(argv[1:])
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        return _handle_config_command(config_args)
 
     initial_checks(console=console, config_file=CONFIG_FILE)
     config = configparser.ConfigParser()
