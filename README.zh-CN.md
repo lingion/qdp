@@ -171,18 +171,6 @@ python -m PyInstaller --clean --noconfirm qdp.spec
 - `build_windows.ps1`
 - `build_windows.sh`
 
-## 备份规则
-在为 Sprint 编辑文件之前，在以下位置创建备份：
-
-`backups/<sprint-id>/pre-implementation-<timestamp>/`
-
-仓库中当前的 Sprint 1 备份目录：
-
-- `backups/sprint-1/pre-implementation-20260406-152622/` — Sprint 1 初始基线编辑
-- `backups/sprint-1/pre-implementation-20260406-153659/` — 备份文档更正
-
-恢复说明记录在 `docs/backup-and-restore.md` 中。
-
 ## 项目文档
 - 产品规格：`docs/PRD.md`
 - 备份策略：`docs/backup-and-restore.md`
