@@ -69,6 +69,7 @@ def build_parser(
     parser.add_argument("-tf", "--track-format", metavar="FMT", help="自定义文件名命名格式")
     parser.add_argument("-s-disc", "--smart-discography", action="store_true", help="智能筛选（下载艺人时过滤重复/杂乱专辑）")
     parser.add_argument("-v", "--verbose", action="store_true", help="输出更详细的人话日志")
+    parser.add_argument("--version", action="store_true", help="显示版本号")
     parser.add_argument("--debug", action="store_true", help="输出调试级别技术细节")
 
     return parser

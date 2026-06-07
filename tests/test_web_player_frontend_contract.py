@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -72,7 +73,7 @@ def test_web_player_frontend_contract():
     assert 'commitQueueReorder' in queue_js
     assert 'syncPlaylistContextAfterQueueReorder' in queue_js
     assert 'canReorderCurrentQueue' in queue_js
-    assert 'renderQueue();\n        syncAuxiliaryUi();\n        await playCurrent(\'queue-click\')' in queue_js
+    assert re.search(r"renderQueue\(\);\s*syncAuxiliaryUi\(\);\s*await playCurrent\('queue-click'\)", queue_js)
 
     # module responsibilities remain discoverable
     assert 'loadAccounts' in accounts_js
