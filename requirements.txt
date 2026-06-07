@@ -1,6 +1,5 @@
 pathvalidate
 requests
 mutagen
-colorama
 beautifulsoup4
 rich

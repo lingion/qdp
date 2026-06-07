@@ -7,7 +7,6 @@ requirements = [
     "requests",
     "mutagen",
     "beautifulsoup4",
-    "colorama",
     "rich",
 ]
 
