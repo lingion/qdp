@@ -195,15 +195,17 @@ def collect_config(console: Console, previous: Dict[str, str]) -> configparser.C
         config['DEFAULT']['user_auth_token'] = _prompt_with_default(console, 'Token', previous.get('user_auth_token', ''), secret=True)
         config['DEFAULT']['region'] = _prompt_with_default(console, '地区/区域(例如 US/JP)', previous.get('region', '--'))
         config['DEFAULT']['expiry_date'] = _prompt_with_default(console, '到期日期(YYYY-MM-DD，可空)', previous.get('expiry_date', ''))
-        console.print(f"\n[{C_OPT}]密钥类型:[/{C_OPT}]")
-        console.print('[1] 网页密钥 (自动抓取)')
-        console.print('[2] 安卓密钥 (推荐)')
-        secret_default = '2' if previous.get('app_id') == ANDROID_APP_ID else '1'
+        console.rule(f"[{C_TITLE}]密钥配置[/{C_TITLE}]")
+        console.print(f"[{C_OPT}]app_id / secrets 决定 API 鉴权方式。[/]")
+        console.print('[1] 使用默认安卓密钥 (推荐，开箱即用)')
+        console.print('[2] 自动抓取网页密钥 (需要 bundle 服务)')
+        console.print('[3] 手动输入自己的 app_id 和 secret')
+        secret_default = '2' if (previous.get('app_id') and previous.get('app_id') != ANDROID_APP_ID) else '1'
         key_choice = _prompt_with_default(console, '请选择', secret_default)
-        if key_choice == '2':
-            config['DEFAULT']['app_id'] = ANDROID_APP_ID
-            config['DEFAULT']['secrets'] = ANDROID_SECRET
-        else:
+        if key_choice == '3':
+            config['DEFAULT']['app_id'] = _prompt_with_default(console, 'App ID', previous.get('app_id', ''))
+            config['DEFAULT']['secrets'] = _prompt_with_default(console, 'App Secret', previous.get('secrets', ''), secret=True)
+        elif key_choice == '2':
             try:
                 bundle = Bundle()
                 config['DEFAULT']['app_id'] = str(bundle.get_app_id())
@@ -212,16 +214,31 @@ def collect_config(console: Console, previous: Dict[str, str]) -> configparser.C
                 logger.warning('Bundle bootstrap failed, fallback to Android secret: %s', exc)
                 config['DEFAULT']['app_id'] = ANDROID_APP_ID
                 config['DEFAULT']['secrets'] = ANDROID_SECRET
+        else:
+            config['DEFAULT']['app_id'] = ANDROID_APP_ID
+            config['DEFAULT']['secrets'] = ANDROID_SECRET
         config['DEFAULT']['label'] = previous.get('label', '')
     else:
         console.rule(f"[{C_TITLE}]邮箱登录[/{C_TITLE}]")
         config['DEFAULT']['use_token'] = 'false'
         config['DEFAULT']['email'] = _prompt_with_default(console, '邮箱', previous.get('email', ''))
         config['DEFAULT']['password'] = _prompt_with_default(console, '密码', previous.get('password', ''), secret=True)
-        config['DEFAULT']['app_id'] = previous.get('app_id', ANDROID_APP_ID) or ANDROID_APP_ID
-        config['DEFAULT']['secrets'] = previous.get('secrets', ANDROID_SECRET) or ANDROID_SECRET
         config['DEFAULT']['user_id'] = ''
         config['DEFAULT']['user_auth_token'] = ''
+
+        console.rule(f"[{C_TITLE}]密钥配置[/{C_TITLE}]")
+        console.print(f"[{C_OPT}]app_id / secrets 决定 API 鉴权方式。[/]")
+        console.print('[1] 使用默认安卓密钥 (推荐，开箱即用)')
+        console.print('[2] 手动输入自己的 app_id 和 secret')
+        prev_app_id = previous.get('app_id', ANDROID_APP_ID) or ANDROID_APP_ID
+        key_default = '2' if (prev_app_id and prev_app_id != ANDROID_APP_ID) else '1'
+        key_choice = _prompt_with_default(console, '请选择', key_default)
+        if key_choice == '2':
+            config['DEFAULT']['app_id'] = _prompt_with_default(console, 'App ID', previous.get('app_id', ''))
+            config['DEFAULT']['secrets'] = _prompt_with_default(console, 'App Secret', previous.get('secrets', ''), secret=True)
+        else:
+            config['DEFAULT']['app_id'] = ANDROID_APP_ID
+            config['DEFAULT']['secrets'] = ANDROID_SECRET
         config['DEFAULT']['region'] = _prompt_with_default(console, '地区/区域(例如 US/JP)', previous.get('region', '--'))
         config['DEFAULT']['expiry_date'] = _prompt_with_default(console, '到期日期(YYYY-MM-DD，可空)', previous.get('expiry_date', ''))
         config['DEFAULT']['label'] = previous.get('label', '')
