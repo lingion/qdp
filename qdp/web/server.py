@@ -54,9 +54,12 @@ _WEB_URL: Optional[str] = None
 
 _CLIENT_CACHE_LOCK = threading.Lock()
 _CLIENT_CACHE: Dict[str, Client] = {}
+_CLIENT_CACHE_MAX = 4
 _ENTITY_CACHE_LOCK = threading.Lock()
 _ENTITY_CACHE: Dict[tuple, dict] = {}
 _ENTITY_CACHE_TTL = 1800
+_ENTITY_CACHE_MAX = 1024
+_MAX_STREAM_BYTES = 800 * 1024 * 1024  # 800 MB hard cap per stream
 _DISCOVER_RANDOM_SEEDS = ["jazz", "classical", "pop", "new", "electronic", "soundtrack"]
 
 logger = logging.getLogger(__name__)
@@ -405,13 +408,22 @@ def _guess_content_type(path: str) -> str:
 
 
 def _safe_join(root: str, rel: str) -> str:
-    # Prevent path traversal
+    # Prevent path traversal, including case-insensitive filesystems.
     rel = rel.lstrip("/")
     rel = rel.replace("\\", "/")
     full = os.path.abspath(os.path.join(root, rel))
     root_abs = os.path.abspath(root)
-    if not full.startswith(root_abs + os.sep) and full != root_abs:
+    root_cmp = os.path.normcase(root_abs)
+    full_cmp = os.path.normcase(full)
+    if os.path.commonpath([root_cmp, full_cmp]) != root_cmp:
         raise ValueError("invalid path")
+    try:
+        real_full = os.path.normcase(os.path.realpath(full))
+        real_root = os.path.normcase(os.path.realpath(root_abs))
+        if os.path.commonpath([real_root, real_full]) != real_root:
+            raise ValueError("invalid path")
+    except OSError:
+        pass
     return full
 
 
@@ -621,6 +633,10 @@ def _cache_set(bucket: str, entity_id: str, value: dict):
     key = (bucket, str(entity_id))
     with _ENTITY_CACHE_LOCK:
         _ENTITY_CACHE[key] = {"ts": time.time(), "value": value}
+        # Evict oldest if over capacity
+        while len(_ENTITY_CACHE) > _ENTITY_CACHE_MAX:
+            oldest = next(iter(_ENTITY_CACHE))
+            del _ENTITY_CACHE[oldest]
     return value
 
 
@@ -634,8 +650,11 @@ def _get_client() -> Client:
     client = _build_client_from_config()
     setattr(client, "active_account", get_active_account(CONFIG_FILE) or "")
     with _CLIENT_CACHE_LOCK:
-        _CLIENT_CACHE.clear()
         _CLIENT_CACHE[key] = client
+        # Evict oldest entries if cache is too large (LRU by insertion order)
+        while len(_CLIENT_CACHE) > _CLIENT_CACHE_MAX:
+            oldest = next(iter(_CLIENT_CACHE))
+            del _CLIENT_CACHE[oldest]
     return client
 
 def _build_client_from_config() -> Client:
@@ -1515,9 +1534,14 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         try:
+            bytes_written = 0
             for chunk in r.iter_content(chunk_size=1024 * 64):
                 if chunk:
                     self.wfile.write(chunk)
+                    bytes_written += len(chunk)
+                    if bytes_written > _MAX_STREAM_BYTES:
+                        logger.warning("Stream exceeded %d bytes, aborting: %s", _MAX_STREAM_BYTES, upstream_url)
+                        return
         except (BrokenPipeError, ConnectionResetError):
             return
         except OSError:
