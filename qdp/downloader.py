@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 _SHARED_ALBUM_META_CACHE: Dict[Tuple[int, str], dict] = {}
 _SHARED_ALBUM_DIRECTORY_CACHE: Dict[str, str] = {}
+_SHARED_CACHE_MAX = 512  # evict oldest when exceeded
 
 BLACKLIST_KEYWORDS = [
     "sped up", "slowed", "reverb", "nightcore",
@@ -231,13 +232,24 @@ class Download:
         cache_key = (id(self.client), album_id)
         if cache_key not in self._album_meta_cache:
             self._album_meta_cache[cache_key] = self.client.get_album_meta(album_id)
+            self._evict_shared_caches()
         return self._album_meta_cache[cache_key]
 
     def _cache_album_artifacts(self, album_id: str, base_path: str, meta: dict):
         cache_key = f"{album_id}:{base_path}"
         if cache_key not in self._album_directory_cache:
             self._album_directory_cache[cache_key] = self._album_directory(meta, base_path)
+            self._evict_shared_caches()
         return self._album_directory_cache[cache_key]
+
+    @staticmethod
+    def _evict_shared_caches():
+        while len(_SHARED_ALBUM_META_CACHE) > _SHARED_CACHE_MAX:
+            oldest = next(iter(_SHARED_ALBUM_META_CACHE))
+            del _SHARED_ALBUM_META_CACHE[oldest]
+        while len(_SHARED_ALBUM_DIRECTORY_CACHE) > _SHARED_CACHE_MAX:
+            oldest = next(iter(_SHARED_ALBUM_DIRECTORY_CACHE))
+            del _SHARED_ALBUM_DIRECTORY_CACHE[oldest]
 
     def inspect_album(self, album_id: str, base_path: Optional[str] = None, announce=True, repair_db=False):
         base_dir = base_path or self.path
@@ -942,7 +954,7 @@ class Download:
         if multiple:
             root_dir = os.path.join(root_dir, f"Disc {multiple}")
         os.makedirs(root_dir, exist_ok=True)
-        temp_file = os.path.join(root_dir, f".{tmp_count:02}.tmp")
+        temp_file = os.path.join(root_dir, f".{tmp_count:02}.{os.getpid()}.tmp")
         context = build_filename_context(track_metadata, track_url_dict)
         formatted_name = track_fmt.format(**context)
         uniqueness_key = f"{track_metadata.get('id', '')}:{formatted_name}:{extension}"

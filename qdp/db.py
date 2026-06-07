@@ -3,8 +3,6 @@ import os
 import sqlite3
 from typing import Any, Dict, Iterable, Optional
 
-from qdp.color import RED, YELLOW
-
 logger = logging.getLogger(__name__)
 
 DOWNLOAD_COLUMNS = {
@@ -34,7 +32,7 @@ def _connect(db_path):
 def _ensure_schema(conn):
     try:
         conn.execute("CREATE TABLE downloads (id TEXT UNIQUE NOT NULL);")
-        logger.info(f"{YELLOW}Download-IDs database created")
+        logger.info("Download-IDs database created")
     except sqlite3.OperationalError:
         pass
 
@@ -83,7 +81,7 @@ def upsert_download_entry(db_path: str, item_id: str, payload: Optional[Dict[str
             conn.execute(sql, values)
             conn.commit()
         except sqlite3.Error as e:
-            logger.error(f"{RED}Unexpected DB error: {e}")
+            logger.error("Unexpected DB error: %s", e)
 
 
 def handle_download_id(db_path, item_id, add_id=False):
