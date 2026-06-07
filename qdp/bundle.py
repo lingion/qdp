@@ -21,31 +21,55 @@ _BUNDLE_URL_REGEX = re.compile(
     r'<script src="(/resources/\d+\.\d+\.\d+-[a-z]\d{3}/bundle\.js)"></script>'
 )
 
-_BASE_URL = "https://q.lingion.qzz.io"
-_BUNDLE_URL_REGEX = re.compile(
-    r'<script src="(/resources/\d+\.\d+\.\d+-[a-z]\d{3}/bundle\.js)"></script>'
-)
+# Base URLs to try in order; earlier entries take priority.
+# Users can override via QDP_BUNDLE_URL env var.
+_BASE_URLS = [
+    "https://play.qobuz.com",
+]
+
+def _get_base_urls():
+    """Return the ordered list of base URLs, allowing env override."""
+    import os
+    env = os.environ.get("QDP_BUNDLE_URL", "").strip()
+    if env:
+        return [env]
+    return _BASE_URLS
 
 
 class Bundle:
     def __init__(self):
         self._session = Session()
 
-        logger.debug("Getting logging page")
-        response = self._session.get(f"{_BASE_URL}/login")
-        response.raise_for_status()
+        base_urls = _get_base_urls()
+        last_exc = None
+        for url in base_urls:
+            try:
+                logger.debug("Getting login page from %s", url)
+                response = self._session.get(f"{url}/login", timeout=15)
+                response.raise_for_status()
 
-        bundle_url_match = _BUNDLE_URL_REGEX.search(response.text)
-        if not bundle_url_match:
-            raise NotImplementedError("Failed to find bundle URL")
+                bundle_url_match = _BUNDLE_URL_REGEX.search(response.text)
+                if not bundle_url_match:
+                    logger.debug("Bundle URL pattern not found at %s", url)
+                    continue
 
-        bundle_url = bundle_url_match.group(1)
+                bundle_url = bundle_url_match.group(1)
 
-        logger.debug("Getting bundle")
-        response = self._session.get(_BASE_URL + bundle_url)
-        response.raise_for_status()
+                logger.debug("Getting bundle from %s", url)
+                response = self._session.get(url + bundle_url, timeout=30)
+                response.raise_for_status()
 
-        self._bundle = response.text
+                self._bundle = response.text
+                return
+            except Exception as exc:
+                logger.debug("Failed to fetch bundle from %s: %s", url, exc)
+                last_exc = exc
+                continue
+
+        raise NotImplementedError(
+            f"Failed to fetch bundle from all known URLs. "
+            f"Set QDP_BUNDLE_URL to a working Qobuz mirror. Last error: {last_exc}"
+        )
 
     def get_app_id(self):
         match = _APP_ID_REGEX.search(self._bundle)

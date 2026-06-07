@@ -36,6 +36,20 @@ def main(argv=None):
         run_ui(argv_entry="qdp")
         return 0
 
+    # --help / --version must work on a completely fresh machine with no config
+    if any(arg in ("-h", "--help") for arg in argv):
+        build_parser(
+            DEFAULT_SETTINGS["default_quality"],
+            DEFAULT_SETTINGS["default_limit"],
+            DEFAULT_SETTINGS["default_folder"],
+        ).parse_args(argv)
+        return 0
+
+    if "--version" in argv:
+        from qdp import __version__
+        console.print(f"qdp {__version__}")
+        return 0
+
     initial_checks(console=console, config_file=CONFIG_FILE)
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
