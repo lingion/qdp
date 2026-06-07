@@ -7,6 +7,7 @@ requirements = [
     "requests",
     "mutagen",
     "beautifulsoup4",
+    "colorama",
     "rich",
 ]
 
@@ -15,7 +16,7 @@ setup(
     version="114.0.1",
     author="lingion",
     description="Local Qobuz web player and toolkit",
-    url="https://github.com/Lingion",
+    url="https://github.com/lingion/qdp",
     install_requires=requirements,
     entry_points={
         "console_scripts": [
@@ -23,6 +24,19 @@ setup(
         ],
     },
     packages=find_packages(),
+    package_data={
+        "qdp": [
+            "web/app/*.js",
+            "web/app/*.html",
+            "web/app/*.css",
+            "web/app/*.svg",
+            "web/static/*",
+            "web/static/**/*",
+            "web/cache-assets/*",
+            "web/cache-assets/**/*",
+        ],
+    },
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",

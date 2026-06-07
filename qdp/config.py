@@ -104,11 +104,11 @@ def _prompt_with_default(console: Console, label, default_value, secret=False):
     shown = default_value if default_value not in (None, "") else ""
     if secret and shown:
         masked = "*" * min(max(len(str(shown)), 8), 12)
-        suffix = f" [{masked}]"
+        suffix = f"  (默认: {masked})"
     else:
-        suffix = f" [{shown}]" if shown else ""
+        suffix = f"  (默认: {shown})" if shown else ""
     prompt = f"{label}{suffix}: "
-    value = console.input(prompt).strip()
+    value = console.input(prompt, markup=False).strip()
     return value if value else (default_value or "")
 
 
@@ -123,7 +123,7 @@ def _prompt_template(console: Console, label, default_value, templates):
 def _prompt_yes_no(console: Console, label, default_bool=False):
     suffix = "Y/n" if default_bool else "y/N"
     default_hint = "Y" if default_bool else "N"
-    raw = console.input(f"{label}? ({suffix}) [{default_hint}]: ").strip().lower()
+    raw = console.input(f"{label}? ({suffix}) [{default_hint}]: ", markup=False).strip().lower()
     if not raw:
         return default_bool
     return raw in ("y", "yes", "1", "true")
@@ -171,7 +171,7 @@ def confirm_config_preview(console: Console, config: configparser.ConfigParser) 
     while True:
         console.print(Panel.fit(build_config_preview(dict(config['DEFAULT'])), title='配置预览', border_style=C_BORDER))
         console.print('[1] 确认保存  [2] 返回修改  [0] 取消')
-        choice = console.input('请选择: ').strip()
+        choice = console.input('请选择: ', markup=False).strip()
         if choice in {'1', '2', '0'}:
             return choice
         console.print('[bold red]请输入 1 / 2 / 0[/]')
@@ -286,8 +286,14 @@ def run_config_wizard(console: Optional[Console] = None, config_file: str = CONF
     if existing.has_section('DEFAULT') or 'DEFAULT' in existing:
         previous.update(dict(existing['DEFAULT']))
     while True:
-        config = collect_config(console, previous)
-        choice = confirm_config_preview(console, config)
+        try:
+            config = collect_config(console, previous)
+            choice = confirm_config_preview(console, config)
+        except EOFError:
+            console.print()
+            console.print('[bold red]配置向导需要交互式终端。[/]')
+            console.print('[yellow]请在终端直接运行 `qdp -r` 完成配置。[/]')
+            raise SystemExit(1)
         if choice == '1':
             os.makedirs(os.path.dirname(config_file), exist_ok=True)
             with open(config_file, 'w') as configfile:
