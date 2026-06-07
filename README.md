@@ -169,18 +169,6 @@ Platform helpers:
 - `build_windows.ps1`
 - `build_windows.sh`
 
-## Backup Rule
-Before editing files for a sprint, create a backup under:
-
-`backups/<sprint-id>/pre-implementation-<timestamp>/`
-
-Sprint 1 backup directories currently in repo:
-
-- `backups/sprint-1/pre-implementation-20260406-152622/` for the initial Sprint 1 baseline edits
-- `backups/sprint-1/pre-implementation-20260406-153659/` for the backup-documentation correction
-
-Restore instructions are documented in `docs/backup-and-restore.md`.
-
 ## Project Docs
 - Product spec: `docs/PRD.md`
 - Backup strategy: `docs/backup-and-restore.md`
