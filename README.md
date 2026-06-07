@@ -1,33 +1,29 @@
 # QDP
 
-本地 Qobuz 工具箱 —— 命令行下载 + 网页播放器，开箱即用。
+A local Qobuz toolkit — CLI downloader + web player, ready to use.
 
-## 这是什么
+## Features
 
-QDP 是一个 Qobuz 音乐平台的本地客户端工具，包含：
+- **CLI/TUI interactive downloader** — search and download albums, tracks, playlists; Hi-Res FLAC supported
+- **Local web player** — open in browser, full playback queue, playlist management, quality switching
+- **Multi-account management** — email/password or token login, switch freely
+- **Proxy pool** — configure multiple proxy nodes with automatic rotation and fallback to direct
+- **Integrity verification** — auto-verify downloads, repair and re-download missing tracks
 
-- **CLI/TUI 交互式下载器** — 搜索、下载专辑/单曲/歌单，支持 Hi-Res FLAC
-- **本地网页播放器** — 浏览器打开即用，完整播放队列、歌单管理、音质切换
-- **多账号管理** — 邮箱登录或 Token 登录，自由切换
-- **代理池支持** — 配置多个代理节点自动轮询，挂了自动切
-- **完整性校验** — 下载后自动验证，支持修复和重新下载缺失曲目
+## Quick Start
 
-## 快速开始
-
-### 环境要求
+### Requirements
 
 - Python 3.9+
 - pip
-- 一个 Qobuz 账号（付费订阅）
+- A Qobuz account (paid subscription)
 
-### 安装
+### Install
 
 ```bash
-# 克隆仓库
 git clone https://github.com/lingion/qdp.git
 cd qdp
 
-# 创建虚拟环境并安装
 python3 -m venv .venv
 source .venv/bin/activate    # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip setuptools wheel
@@ -35,133 +31,132 @@ python -m pip install -r requirements.txt
 python -m pip install -e . --no-build-isolation
 ```
 
-### 首次配置
+### First-time Setup
 
 ```bash
 qdp -r
 ```
 
-配置向导会引导你完成：
-1. **登录方式** — 邮箱/密码（推荐）或 Token
-2. **密钥选择** — 默认安卓密钥（开箱即用）、自动抓取网页密钥、或手动输入自己的 App ID / Secret
-3. **下载目录** — 默认为当前目录下的 `Qobuz Downloads`
-4. **音质偏好** — MP3、16-bit FLAC、24-bit Hi-Res 等
+The config wizard will walk you through:
+1. **Login method** — email/password (recommended) or token
+2. **Key selection** — default Android key (works out of box), auto-fetch web key, or manually enter your own App ID / Secret
+3. **Download directory** — defaults to `Qobuz Downloads` in current directory
+4. **Quality preference** — MP3, 16-bit FLAC, 24-bit Hi-Res, etc.
 
-### 使用
+### Usage
 
 ```bash
-# 启动交互式界面（推荐）
+# Launch interactive UI (recommended)
 qdp
 
-# 命令行搜索
-qdp -s "周杰伦"
-qdp -sa "范特西"     # 搜索专辑
-qdp -st "晴天"       # 搜索单曲
+# Command-line search
+qdp -s "Beatles"
+qdp -sa "Abbey Road"    # search albums
+qdp -st "Yesterday"     # search tracks
 
-# 下载指定链接
+# Download from URL
 qdp "https://www.qobuz.com/album/xxxxx"
 
-# 查看 help
+# Help & version
 qdp --help
 qdp --version
 ```
 
-## 网页播放器
+## Web Player
 
 ```bash
-# 方式一：在 TUI 里选择 "Web Player"
+# Option 1: from TUI, type w + Enter
 qdp
-# 然后输入 w 回车
 
-# 方式二：直接启动服务器
+# Option 2: start server directly
 python3 -m qdp.web.server
 ```
 
-启动后自动打开浏览器，地址通常是 `http://127.0.0.1:17890/`
+Opens browser automatically, typically at `http://127.0.0.1:17890/`
 
-### 功能
+### Features
 
-- 搜索并播放 Qobuz 曲库
-- 播放队列管理（拖拽排序、单曲循环、随机播放）
-- 音质实时切换（播放中切换，保持进度）
-- 单曲/专辑下载
-- 歌单管理
-- 多账号切换
-- 发现页（随机推荐）
-- 文件浏览器（浏览已下载的音乐）
+- Search and play from Qobuz catalog
+- Queue management (drag reorder, repeat, shuffle)
+- Real-time quality switching (keeps playback position)
+- Track/album download
+- Playlist management
+- Multi-account switching
+- Discover page (random recommendations)
+- File browser (browse downloaded music)
 
-### 环境变量
+### Environment Variables
 
-| 变量 | 说明 |
-|------|------|
-| `QDP_WEB_HOST` | 绑定地址（默认 `127.0.0.1`） |
-| `QDP_WEB_PORT` | 绑定端口（默认 `17890`） |
-| `QDP_BUNDLE_URL` | 自定义 Qobuz 镜像地址（用于抓取网页密钥） |
+| Variable | Description |
+|----------|-------------|
+| `QDP_WEB_HOST` | Bind address (default `127.0.0.1`) |
+| `QDP_WEB_PORT` | Bind port (default `17890`) |
+| `QDP_BUNDLE_URL` | Custom Qobuz mirror URL (for web key fetching) |
 | `QDP_APP_ID` | Qobuz App ID |
-| `QDP_AUTH_TOKEN` | Qobuz 认证 Token |
+| `QDP_AUTH_TOKEN` | Qobuz auth token |
 
-## 代理配置
+## Proxy Configuration
 
-在配置向导或直接编辑 `~/.config/qobuz-dl/config.ini`，添加 `proxies` 字段：
+Add a `proxies` field in config (via wizard or edit `~/.config/qobuz-dl/config.ini`):
 
 ```ini
 [DEFAULT]
 proxies = https://proxy1.example.com,https://proxy2.example.com
 ```
 
-下载和 API 请求会自动轮询代理节点，失败自动切换，全挂了直连兜底。
+Downloads and API requests automatically rotate through proxies. Falls back to direct connection if all proxies fail.
 
-## 依赖
+## Dependencies
 
-核心依赖（`requirements.txt`）：
-- `pathvalidate` — 文件名安全处理
-- `requests` — HTTP 请求
-- `mutagen` — 音频元数据读写
-- `beautifulsoup4` — HTML 解析
-- `rich` — 终端美化输出
+Core (`requirements.txt`):
+- `pathvalidate` — safe filename handling
+- `requests` — HTTP requests
+- `mutagen` — audio metadata read/write
+- `beautifulsoup4` — HTML parsing
+- `rich` — terminal rich output
 
-构建依赖（`requirements-build.txt`）：包含 PyInstaller 等，打包时需要。
+Build (`requirements-build.txt`): includes PyInstaller etc., needed for packaging.
 
-## 测试
+## Testing
 
 ```bash
 python -m pip install -r requirements-build.txt
 python -m pytest -q
 ```
 
-## 打包
+## Packaging
 
 ```bash
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --clean --noconfirm qdp.spec
 ```
 
-产物在 `dist/qdp/` 目录下。
+Output in `dist/qdp/`.
 
-## 项目结构
+## Project Structure
 
 ```
 qdp/
-├── cli.py           # 命令行入口
-├── ui.py            # TUI 交互界面
-├── core.py          # 核心下载逻辑
-├── downloader.py    # 下载管线（重试、代理、并发）
-├── qopy.py          # Qobuz API 客户端
-├── config.py        # 配置向导
-├── accounts.py      # 多账号管理
-├── integrity.py     # 完整性校验
-├── metadata.py      # 音频标签写入
-├── db.py            # 下载记录数据库
-├── bundle.py        # 网页密钥抓取
-├── sidecar.py       # 附属元数据
+├── cli.py           # CLI entry point
+├── ui.py            # TUI interactive interface
+├── core.py          # Core download logic
+├── downloader.py    # Download pipeline (retry, proxy, concurrency)
+├── qopy.py          # Qobuz API client
+├── config.py        # Config wizard
+├── accounts.py      # Multi-account management
+├── integrity.py     # Integrity verification
+├── metadata.py      # Audio tag writing
+├── db.py            # Download record database
+├── bundle.py        # Web key fetching
+├── sidecar.py       # Sidecar metadata
 ├── web/
-│   ├── server.py    # 本地 Web 服务器
-│   └── app/         # 前端（HTML/JS/CSS）
-├── tests/           # 自动化测试
-└── docs/            # 项目文档
+│   ├── server.py    # Local web server
+│   └── app/         # Frontend (HTML/JS/CSS)
+├── tests/           # Automated tests
+└── docs/            # Project docs
 ```
 
-## 维护者
+## Maintainers
 
-- **Lingion** — 主线集成、基础设施、部署、代码质量
-- **Kerry1020** — 网页播放器、前端 UI、浏览器交互
+- **Lingion** — mainline integration, infrastructure, deployment, code quality
+- **Kerry1020** — web player, frontend UI, browser interaction
