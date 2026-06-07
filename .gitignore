@@ -1,9 +1,10 @@
-
-__pycache__/
-.DS_Store
-.pytest_cache/
-
 __pycache__/
 *.pyc
 .DS_Store
 .pytest_cache/
+dist/
+build/
+*.egg-info/
+.venv/
+*.apk
+*.tar.gz
