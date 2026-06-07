@@ -1,181 +1,167 @@
-# qdp
+# QDP
 
-qdp is a local Qobuz toolkit with an existing CLI/TUI downloader workflow and a local web player runtime.
+本地 Qobuz 工具箱 —— 命令行下载 + 网页播放器，开箱即用。
 
-Sprint 1 establishes the delivery baseline by documenting scope, backup rules, runnable commands, and packaging metadata.
+## 这是什么
 
-## What is in this repository
-- CLI entrypoint: `qdp/__main__.py` and `qdp/cli.py`
-- Interactive UI/TUI: `qdp/ui.py`
-- Account management: `qdp/accounts.py`
-- Local web player server: `qdp/web/server.py`
-- Browser app assets: `qdp/web/app/`
-- Automated tests: `tests/`
-- Packaging files: `setup.py`, `qdp.spec`, `build_windows.*`
+QDP 是一个 Qobuz 音乐平台的本地客户端工具，包含：
 
-## Requirements
+- **CLI/TUI 交互式下载器** — 搜索、下载专辑/单曲/歌单，支持 Hi-Res FLAC
+- **本地网页播放器** — 浏览器打开即用，完整播放队列、歌单管理、音质切换
+- **多账号管理** — 邮箱登录或 Token 登录，自由切换
+- **代理池支持** — 配置多个代理节点自动轮询，挂了自动切
+- **完整性校验** — 下载后自动验证，支持修复和重新下载缺失曲目
+
+## 快速开始
+
+### 环境要求
+
 - Python 3.9+
 - pip
-- Qobuz account credentials/config available locally
+- 一个 Qobuz 账号（付费订阅）
 
-## Install
-Create a virtual environment and install runtime dependencies:
+### 安装
 
 ```bash
+# 克隆仓库
+git clone https://github.com/lingion/qdp.git
+cd qdp
+
+# 创建虚拟环境并安装
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.txt
 python -m pip install -e . --no-build-isolation
 ```
 
-## Environment / Credentials
-Example variables are in `.env.example`.
+### 首次配置
 
-The current application also reads account/config data from the local qdp config flow, especially for authenticated web-player actions.
-
-## Run
-### CLI / TUI
 ```bash
+qdp -r
+```
+
+配置向导会引导你完成：
+1. **登录方式** — 邮箱/密码（推荐）或 Token
+2. **密钥选择** — 默认安卓密钥（开箱即用）、自动抓取网页密钥、或手动输入自己的 App ID / Secret
+3. **下载目录** — 默认为当前目录下的 `Qobuz Downloads`
+4. **音质偏好** — MP3、16-bit FLAC、24-bit Hi-Res 等
+
+### 使用
+
+```bash
+# 启动交互式界面（推荐）
 qdp
+
+# 命令行搜索
+qdp -s "周杰伦"
+qdp -sa "范特西"     # 搜索专辑
+qdp -st "晴天"       # 搜索单曲
+
+# 下载指定链接
+qdp "https://www.qobuz.com/album/xxxxx"
+
+# 查看 help
+qdp --help
+qdp --version
 ```
 
-or
+## 网页播放器
 
 ```bash
-python -m qdp
-```
+# 方式一：在 TUI 里选择 "Web Player"
+qdp
+# 然后输入 w 回车
 
-### Web player
-```bash
+# 方式二：直接启动服务器
 python3 -m qdp.web.server
 ```
 
-The server prints a listening URL such as `QDP web server listening on http://127.0.0.1:17890/` and keeps running until you stop it.
+启动后自动打开浏览器，地址通常是 `http://127.0.0.1:17890/`
 
-A reproducible local smoke sequence for the backend runtime is:
+### 功能
 
-```bash
-curl -i http://127.0.0.1:17890/
-curl -i http://127.0.0.1:17890/app/
-curl -i http://127.0.0.1:17890/nope
-curl -i http://127.0.0.1:17890/stream
-curl -i 'http://127.0.0.1:17890/api.json/0.2/test?x=1'
-python3 scripts/webplayer_smoke.py --json
-python3 -m pytest -q tests/test_web_server_runtime.py tests/test_web_player_frontend_contract.py tests/test_webplayer_smoke_cli.py
+- 搜索并播放 Qobuz 曲库
+- 播放队列管理（拖拽排序、单曲循环、随机播放）
+- 音质实时切换（播放中切换，保持进度）
+- 单曲/专辑下载
+- 歌单管理
+- 多账号切换
+- 发现页（随机推荐）
+- 文件浏览器（浏览已下载的音乐）
+
+### 环境变量
+
+| 变量 | 说明 |
+|------|------|
+| `QDP_WEB_HOST` | 绑定地址（默认 `127.0.0.1`） |
+| `QDP_WEB_PORT` | 绑定端口（默认 `17890`） |
+| `QDP_BUNDLE_URL` | 自定义 Qobuz 镜像地址（用于抓取网页密钥） |
+| `QDP_APP_ID` | Qobuz App ID |
+| `QDP_AUTH_TOKEN` | Qobuz 认证 Token |
+
+## 代理配置
+
+在配置向导或直接编辑 `~/.config/qobuz-dl/config.ini`，添加 `proxies` 字段：
+
+```ini
+[DEFAULT]
+proxies = https://proxy1.example.com,https://proxy2.example.com
 ```
 
-`webplayer_smoke.py` defaults to auto-starting a local Web Player, and also supports:
-- `python3 scripts/webplayer_smoke.py --json` — auto-start + machine-readable JSON output
-- `python3 scripts/webplayer_smoke.py --base-url http://127.0.0.1:17890 --no-start` — reuse an existing server instance
-- `python3 scripts/webplayer_smoke.py --base-url http://127.0.0.1:17890 --no-start --json` — reuse an existing instance with stable JSON output
+下载和 API 请求会自动轮询代理节点，失败自动切换，全挂了直连兜底。
 
-Expected results:
-- `/` redirects to `/app/`
-- `/app/` returns `200`
-- `/nope` returns `404`
-- `/stream` without `url` returns `400`
-- `/api.json/0.2/test?x=1` returns `200` and JSON describing the active proxy/runtime contract
-- `webplayer_smoke.py --json` returns parseable JSON and validates runtime version consistency, core API routes, stream proxy behavior, and the frontend DOM contract
+## 依赖
 
-Supported runtime environment variables:
-- `QDP_WEB_HOST` — bind host for the local HTTP server
-- `QDP_WEB_PORT` — bind port for the local HTTP server
-- `QDP_APP_ID` or `QOBUZ_APP_ID` — Qobuz application ID used by proxy routes
-- `QDP_AUTH_TOKEN`, `QOBUZ_AUTH_TOKEN`, or `QOBUZ_USER_AUTH_TOKEN` — auth token forwarded to authenticated Qobuz API calls
-- `QDP_USER_AGENT` or `QOBUZ_USER_AGENT` — user agent used for upstream API, asset, and stream requests
-- `QDP_USE_TOKEN` or `QOBUZ_USE_TOKEN` — optional token-mode override
+核心依赖（`requirements.txt`）：
+- `pathvalidate` — 文件名安全处理
+- `requests` — HTTP 请求
+- `mutagen` — 音频元数据读写
+- `beautifulsoup4` — HTML 解析
+- `rich` — 终端美化输出
 
-## Test
-Run the existing automated test suite from the repository root:
+构建依赖（`requirements-build.txt`）：包含 PyInstaller 等，打包时需要。
 
-```bash
-pytest -q
-```
-
-The repository now ships `pytest.ini` so backup folders are not collected as tests.
-
-Local-only build outputs and caches such as `build/`, `dist/`, `__pycache__/`, `.pytest_cache/`, and virtualenv directories should not be committed; they are safe to regenerate during local packaging or test runs.
-
-If pytest is not installed yet:
-
-```bash
-python -m pip install pytest
-pytest -q
-```
-
-## Packaging
-Install build dependencies:
+## 测试
 
 ```bash
 python -m pip install -r requirements-build.txt
+python -m pytest -q
 ```
 
-Build with PyInstaller:
+## 打包
 
 ```bash
+python -m pip install -r requirements-build.txt
 python -m PyInstaller --clean --noconfirm qdp.spec
 ```
 
-Preferred portable helper (works on Unix-like shells and auto-detects `python3` when `python` is unavailable):
+产物在 `dist/qdp/` 目录下。
 
-```bash
-./build_windows.sh
+## 项目结构
+
+```
+qdp/
+├── cli.py           # 命令行入口
+├── ui.py            # TUI 交互界面
+├── core.py          # 核心下载逻辑
+├── downloader.py    # 下载管线（重试、代理、并发）
+├── qopy.py          # Qobuz API 客户端
+├── config.py        # 配置向导
+├── accounts.py      # 多账号管理
+├── integrity.py     # 完整性校验
+├── metadata.py      # 音频标签写入
+├── db.py            # 下载记录数据库
+├── bundle.py        # 网页密钥抓取
+├── sidecar.py       # 附属元数据
+├── web/
+│   ├── server.py    # 本地 Web 服务器
+│   └── app/         # 前端（HTML/JS/CSS）
+├── tests/           # 自动化测试
+└── docs/            # 项目文档
 ```
 
-The helper now:
-- creates an isolated `.venv-build` virtual environment
-- installs runtime and build dependencies
-- runs `python -m PyInstaller --clean --noconfirm qdp.spec`
-- verifies that `dist/qdp/qdp`, `dist/qdp/qdp.exe`, or legacy flat `dist/qdp(.exe)` exists
-- smoke-checks the artifact with `--help` before declaring success
+## 维护者
 
-Platform helpers:
-- `build_windows.bat`
-- `build_windows.ps1`
-- `build_windows.sh`
-
-## Backup Rule
-Before editing files for a sprint, create a backup under:
-
-`backups/<sprint-id>/pre-implementation-<timestamp>/`
-
-Sprint 1 backup directories currently in repo:
-
-- `backups/sprint-1/pre-implementation-20260406-152622/` for the initial Sprint 1 baseline edits
-- `backups/sprint-1/pre-implementation-20260406-153659/` for the backup-documentation correction
-
-Restore instructions are documented in `docs/backup-and-restore.md`.
-
-## Project Docs
-- Product spec: `docs/PRD.md`
-- Backup strategy: `docs/backup-and-restore.md`
-- Definition of done: `docs/definition-of-done.md`
-
-
-## Webapp Maintenance
-
-The web-facing layer now has a dedicated maintenance note:
-- `docs/webapp-maintenance.md`
-
-This area is mainly aligned with Kerry's contribution scope: web UI, browser interaction, and frontend-facing maintainability.
-
-
-## Webapp Demo
-
-- Live demo: https://3154c1b6.qdp-webapp-demo.pages.dev
-- Deployment URL: https://3154c1b6.qdp-webapp-demo.pages.dev
-
-### Webapp Preview
-
-![qdp webapp preview](docs/screenshots/webapp-home.jpg)
-
-### TUI Preview
-
-![qdp TUI search](docs/screenshots/tui-search.svg)
-
-
-## Maintained By
-
-- **Lingion**: mainline integration, infrastructure, deployment, and repository quality
-- **Kerry1020**: webapp, UI, browser-side behavior, and frontend-facing maintenance
+- **Lingion** — 主线集成、基础设施、部署、代码质量
+- **Kerry1020** — 网页播放器、前端 UI、浏览器交互
