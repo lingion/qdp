@@ -211,4 +211,4 @@ Album detail with the new Apple Music style bulk download bar
 - **Lingion**: mainline integration, infrastructure, deployment, and repository quality
 - **Kerry1020**: webapp, UI, browser-side behavior, and frontend-facing maintenance
 
-> Single source of truth: `lingion/qdp` and `Kerry1020/qdp` track the same `main` branch and are kept in lockstep.
+> Repository: `lingion/qdp` is the canonical repository. `Kerry1020/qdp` is kept in lockstep as a mirror. Kerry1020 is a collaborator with write access.
