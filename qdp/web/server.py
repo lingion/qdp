@@ -31,6 +31,7 @@ from qdp.web import __version__ as WEB_PLAYER_VERSION
 from qdp.utils import get_active_proxy
 
 _ASSET_CACHE_ROOT = os.path.join(os.path.dirname(__file__), "cache-assets")
+_AUDIO_CACHE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "cache"))
 
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 17890
@@ -593,6 +594,13 @@ def _asset_cache_path(path: str) -> str:
     return _safe_join(_ASSET_CACHE_ROOT, rel)
 
 
+def _audio_cache_file(track_id: str, fmt: int, upstream_url: str = "") -> str:
+    safe_tid = re.sub(r"[^A-Za-z0-9._-]+", "_", str(track_id or "track"))[:120]
+    ext = posixpath.splitext(urllib.parse.urlparse(upstream_url).path or '')[1] or ('.mp3' if int(fmt or 5) <= 5 else '.flac')
+    filename = f"{safe_tid}_{int(fmt or 5)}{ext}"
+    return os.path.join(_AUDIO_CACHE_ROOT, filename)
+
+
 def _client_cache_key(defaults: Optional[dict] = None) -> str:
     defaults = defaults or _get_runtime_defaults()
     active_account = get_active_account(CONFIG_FILE) or "default"
@@ -692,6 +700,27 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         self._trace("POST", path)
+
+        if path == "/api/cache-clear":
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length > 0 else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8", errors="ignore") or "{}")
+            except Exception:
+                payload = {}
+            kind = str(payload.get("type") or "audio")
+            cleared = 0
+            if kind in {"audio", "all"} and os.path.isdir(_AUDIO_CACHE_ROOT):
+                for name in os.listdir(_AUDIO_CACHE_ROOT):
+                    fp = os.path.join(_AUDIO_CACHE_ROOT, name)
+                    if os.path.isfile(fp):
+                        try:
+                            cleared += os.path.getsize(fp)
+                            os.remove(fp)
+                        except OSError:
+                            pass
+            self._send_api_success({"ok": True, "type": kind, "cleared_bytes": cleared})
+            return
 
         if path == "/api/accounts/switch":
             self._handle_app_api(parsed)
@@ -1017,8 +1046,15 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             self._send_api_file_error(HTTPStatus.BAD_REQUEST, "bad_path", "Bad path")
             return
         if not os.path.isfile(full):
-            self._send_api_file_error(HTTPStatus.NOT_FOUND, "not_found", "Not found")
-            return
+            # SPA fallback for client-side app routes like /app/search or /app/artist/:id
+            rel_posix = rel.replace('\\', '/')
+            if '.' not in posixpath.basename(rel_posix):
+                rel = _APP_INDEX_FILE
+                full = _safe_join(_APP_ROOT, rel)
+                is_app_index = True
+            else:
+                self._send_api_file_error(HTTPStatus.NOT_FOUND, "not_found", "Not found")
+                return
         try:
             with open(full, "rb") as f:
                 body = f.read()
@@ -1326,8 +1362,9 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             if not raw_url:
                 self._send_api_error(502, "missing_upstream_url", "missing url")
                 return
-            prox = "/stream?url=" + urllib.parse.quote(raw_url, safe="")
-            self._send_api_success({"url": prox, "download_url": f"/api/download?id={urllib.parse.quote(str(tid), safe='')}&fmt={fmt}"})
+            prox = "/stream?url=" + urllib.parse.quote(raw_url, safe="") + "&track_id=" + urllib.parse.quote(str(tid), safe="") + "&fmt=" + urllib.parse.quote(str(fmt), safe="")
+            cached = f"/api/cached-track?id={urllib.parse.quote(str(tid), safe='')}&fmt={fmt}"
+            self._send_api_success({"url": prox, "cached_url": cached, "download_url": f"/api/download?id={urllib.parse.quote(str(tid), safe='')}&fmt={fmt}"})
             return
 
         if path == "/api/download":
@@ -1375,23 +1412,54 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         if path == "/api/cache-stats":
             try:
                 import shutil
-                audio_cache = os.path.join(os.path.dirname(__file__), "..", "cache")
+                audio_cache = _AUDIO_CACHE_ROOT
                 audio_size = 0
+                audio_count = 0
                 if os.path.isdir(audio_cache):
                     for dirpath, _, filenames in os.walk(audio_cache):
                         for f in filenames:
                             fp = os.path.join(dirpath, f)
                             try:
                                 audio_size += os.path.getsize(fp)
+                                audio_count += 1
                             except OSError:
                                 pass
                 total_size = audio_size
                 self._send_api_success({
-                    "audio": {"size_bytes": audio_size, "count": 0},
-                    "total": {"size_bytes": total_size, "count": 0}
+                    "audio": {"size_bytes": audio_size, "count": audio_count},
+                    "total": {"size_bytes": total_size, "count": audio_count}
                 })
             except Exception as e:
-                self._send_api_success({"audio": {"size_bytes": 0}, "total": {"size_bytes": 0}})
+                self._send_api_success({"audio": {"size_bytes": 0, "count": 0}, "total": {"size_bytes": 0, "count": 0}})
+            return
+
+        if path == "/api/cached-track":
+            tid = (qs.get("id") or [""])[0]
+            fmt = self._parse_int_query(qs, "fmt", 5, minimum=5)
+            if not tid:
+                self._send_api_error(400, "missing_id", "missing track id")
+                return
+            prefix = f"{re.sub(r'[^A-Za-z0-9._-]+', '_', str(tid))[:120]}_{int(fmt)}"
+            if os.path.isdir(_AUDIO_CACHE_ROOT):
+                for name in os.listdir(_AUDIO_CACHE_ROOT):
+                    if name.startswith(prefix):
+                        fp = os.path.join(_AUDIO_CACHE_ROOT, name)
+                        if os.path.isfile(fp):
+                            try:
+                                with open(fp, "rb") as f:
+                                    body = f.read()
+                                self.send_response(HTTPStatus.OK)
+                                self._send_cors_headers()
+                                self.send_header("Content-Type", _guess_content_type(fp))
+                                self.send_header("Content-Length", str(len(body)))
+                                self.send_header("Accept-Ranges", "bytes")
+                                self.send_header("Cache-Control", "public, max-age=86400")
+                                self.end_headers()
+                                self.wfile.write(body)
+                                return
+                            except OSError:
+                                break
+            self._send_api_error(404, "cache_miss", "cached track not found")
             return
 
         if path == "/api/download-settings":
@@ -1599,16 +1667,35 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         upstream_url = urllib.parse.unquote(raw)
         requested_filename = (qs.get("filename") or [""])[0]
         requested_filename = _sanitize_download_filename(urllib.parse.unquote(requested_filename), fallback="track")
+        track_id = (qs.get("track_id") or [""])[0]
+        fmt = self._parse_int_query(qs, "fmt", 5, minimum=5)
         try:
             upstream_url = _validate_stream_upstream_url(upstream_url)
         except ValueError as exc:
             self._send_api_error(HTTPStatus.BAD_REQUEST, "invalid_stream_url", str(exc))
             return
 
+        cache_file = _audio_cache_file(track_id, fmt, upstream_url) if track_id else ""
+        rng = self.headers.get("Range")
+        if cache_file and os.path.isfile(cache_file) and not rng:
+            try:
+                with open(cache_file, "rb") as f:
+                    body = f.read()
+                self.send_response(HTTPStatus.OK)
+                self._send_cors_headers()
+                self.send_header("Content-Type", _guess_content_type(cache_file))
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            except OSError:
+                pass
+
         req_headers = {
             "User-Agent": _get_user_agent(),
         }
-        rng = self.headers.get("Range")
         if rng:
             req_headers["Range"] = rng
 
@@ -1652,13 +1739,34 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
 
         try:
             bytes_written = 0
+            cache_tmp = None
+            cache_fp = None
+            if cache_file and not rng and r.status_code == 200:
+                try:
+                    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                    cache_tmp = cache_file + ".part"
+                    cache_fp = open(cache_tmp, "wb")
+                except OSError:
+                    cache_fp = None
             for chunk in r.iter_content(chunk_size=1024 * 64):
                 if chunk:
                     self.wfile.write(chunk)
+                    if cache_fp:
+                        try:
+                            cache_fp.write(chunk)
+                        except OSError:
+                            cache_fp = None
                     bytes_written += len(chunk)
                     if bytes_written > _MAX_STREAM_BYTES:
                         logger.warning("Stream exceeded %d bytes, aborting: %s", _MAX_STREAM_BYTES, upstream_url)
                         return
+            if cache_fp:
+                cache_fp.close()
+                cache_fp = None
+                try:
+                    os.replace(cache_tmp, cache_file)
+                except OSError:
+                    pass
         except (BrokenPipeError, ConnectionResetError):
             return
         except OSError:

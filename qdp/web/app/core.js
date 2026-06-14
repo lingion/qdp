@@ -396,6 +396,25 @@ function paintIcons(root){
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const STREAM_STALE_MS = 1000 * 60 * 30;   // stream URLs expire ~1h; refresh after 30min
 const STREAM_PREFETCH_MAX_AGE_MS = STREAM_STALE_MS;  // align with staleness threshold to avoid stale-cache gap
+const SEARCH_HISTORY_KEY = 'qdp.web.search-history.v1';
+const SEARCH_HISTORY_MAX = 12;
+
+function loadSearchHistory(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter(Boolean).map(String).slice(0, SEARCH_HISTORY_MAX) : [];
+  }catch(_e){ return []; }
+}
+function saveSearchHistory(items){
+  safeLocalStorageSet(SEARCH_HISTORY_KEY, JSON.stringify((Array.isArray(items) ? items : []).slice(0, SEARCH_HISTORY_MAX)));
+}
+function pushSearchHistory(query){
+  const q = String(query || '').trim();
+  if(!q) return;
+  const next = [q, ...state.searchHistory.filter((item)=>item !== q)].slice(0, SEARCH_HISTORY_MAX);
+  state.searchHistory = next;
+  saveSearchHistory(next);
+}
 
 // ═══ State ═══
 
@@ -451,6 +470,9 @@ const state = {
   trackSelection: { viewKey: '', selectedKeys: [] },
   searchOffset: 0,
   searchHasMore: false,
+  searchHistory: loadSearchHistory(),
+  routeSyncLock: false,
+  currentRoute: null,
 };
 
 // Prune stale stream cache entries on startup
@@ -592,6 +614,74 @@ function normalizePathLike(value, fallback = ''){
   const text = String(value || '').trim();
   if(!text) return String(fallback || '');
   return text.replace(/\\+/g, '/').replace(/\/+/g, '/').replace(/\/+$/, '');
+}
+
+function qdpRouteUrl(route = {}){
+  const kind = String(route.kind || 'discover');
+  const params = new URLSearchParams();
+  if(route.q) params.set('q', String(route.q));
+  if(route.type) params.set('type', String(route.type));
+  let path = '/app/discover';
+  if(kind === 'search') path = '/app/search';
+  else if(kind === 'album' && route.id) path = `/app/album/${encodeURIComponent(route.id)}`;
+  else if(kind === 'artist' && route.id) path = `/app/artist/${encodeURIComponent(route.id)}`;
+  else if(kind === 'playlist' && route.id) path = `/app/playlist/${encodeURIComponent(route.id)}`;
+  else if(kind === 'queue') path = '/app/queue';
+  else if(kind === 'playlists') path = '/app/playlists';
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+function setRoute(route = {}, mode = 'push'){
+  if(state.routeSyncLock) return;
+  state.currentRoute = { ...route };
+  const nextUrl = qdpRouteUrl(route);
+  const currentUrl = `${location.pathname}${location.search}`;
+  if(nextUrl === currentUrl) return;
+  const payload = { qdp: true, route: state.currentRoute };
+  if(mode === 'replace') history.replaceState(payload, '', nextUrl);
+  else history.pushState(payload, '', nextUrl);
+}
+function routeForCurrentSearch(){
+  return { kind: 'search', q: state.q || ($('q')?.value || '').trim(), type: state.type || 'tracks' };
+}
+async function restoreRouteFromLocation(){
+  const path = location.pathname.replace(/\/$/, '');
+  const params = new URLSearchParams(location.search);
+  const q = (params.get('q') || '').trim();
+  const type = (params.get('type') || 'tracks').trim();
+  state.routeSyncLock = true;
+  try{
+    if(path === '/app/search'){
+      if($('q')) $('q').value = q;
+      if(q) pushSearchHistory(q);
+      setActiveTab(type || 'tracks');
+      await search({ skipRoute: true, preserveHistory: true });
+      return;
+    }
+    if(path.startsWith('/app/album/')){
+      await openAlbum(decodeURIComponent(path.split('/').pop() || ''), { skipRoute: true, preserveHistory: true });
+      return;
+    }
+    if(path.startsWith('/app/artist/')){
+      await openArtist(decodeURIComponent(path.split('/').pop() || ''), { skipRoute: true, preserveHistory: true });
+      return;
+    }
+    if(path.startsWith('/app/playlist/')){
+      await openPlaylist(decodeURIComponent(path.split('/').pop() || ''), { skipRoute: true, preserveHistory: true });
+      return;
+    }
+    if(path === '/app/queue'){
+      $('navQueue')?.click();
+      return;
+    }
+    if(path === '/app/playlists'){
+      $('navPlaylists')?.click();
+      return;
+    }
+    await loadDiscoverRandom(true);
+  } finally {
+    state.routeSyncLock = false;
+  }
 }
 
 function buildQueueContext(context = null){
@@ -1052,6 +1142,7 @@ function setPlayIcon(kind){
 function setActiveTab(type){
   state.type = type;
   document.querySelectorAll('.tab').forEach((b)=> b.classList.toggle('active', b.dataset.type === type));
+  document.querySelectorAll('.mobile-tab').forEach((b)=> b.classList.toggle('active', b.dataset.type === type));
 }
 function setView(renderer){
   state.currentView = renderer;
@@ -1064,6 +1155,17 @@ function setView(renderer){
   root.style.gridTemplateColumns = hasDetail ? '1fr' : '';
   const backBtn = $('backTop');
   if(backBtn) backBtn.classList.toggle('hidden', state.history.length === 0);
+  const mobileBack = $('mobileBackBtn');
+  if(mobileBack) mobileBack.classList.toggle('hidden', state.history.length === 0);
+  const desktopBack = $('desktopBackBtn');
+  if(desktopBack) desktopBack.classList.toggle('hidden', state.history.length === 0);
+  const mobileMenu = $('mobileMenuBtn');
+  const mobileQueue = $('mobileQueueBtn');
+  const onDetail = !!hasDetail;
+  if(mobileMenu) mobileMenu.classList.toggle('hidden', onDetail);
+  if(mobileQueue) mobileQueue.classList.toggle('hidden', onDetail);
+  const topbarTitle = $('mobileTopbarTitle');
+  if(topbarTitle) topbarTitle.textContent = onDetail ? '' : '发现';
 }
 function pushView(renderer){
   if(state.currentView) state.history.push(state.currentView);
@@ -1074,6 +1176,33 @@ function goBack(){
   if(prev) setView(prev);
   const backBtn = $('backTop');
   if(backBtn) backBtn.classList.toggle('hidden', state.history.length === 0);
+  const mobileBack = $('mobileBackBtn');
+  if(mobileBack) mobileBack.classList.toggle('hidden', state.history.length === 0);
+  const desktopBack = $('desktopBackBtn');
+  if(desktopBack) desktopBack.classList.toggle('hidden', state.history.length === 0);
+}
+
+function syncMobileTopbar(){
+  const root = $('results');
+  if(!root) return;
+  const hasDetail = !!root.querySelector('.detail, .skeleton-detail');
+  const mobileMenu = $('mobileMenuBtn');
+  const mobileQueue = $('mobileQueueBtn');
+  if(mobileMenu) mobileMenu.classList.toggle('hidden', hasDetail);
+  if(mobileQueue) mobileQueue.classList.toggle('hidden', hasDetail);
+  const backBtn = $('backTop');
+  if(backBtn) backBtn.classList.toggle('hidden', state.history.length === 0);
+  const mobileBack = $('mobileBackBtn');
+  if(mobileBack) mobileBack.classList.toggle('hidden', state.history.length === 0);
+  const topbarTitle = $('mobileTopbarTitle');
+  if(topbarTitle){
+    const titleEl = root.querySelector('.detailTitle');
+    if(titleEl && titleEl.textContent.trim()){
+      topbarTitle.textContent = titleEl.textContent.trim();
+    }else{
+      topbarTitle.textContent = hasDetail ? '' : '发现';
+    }
+  }
 }
 function clearHistory(){
   state.history = [];

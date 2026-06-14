@@ -23,6 +23,14 @@
           </button>
           <button id="go" type="button" aria-hidden="true">搜索</button>
         </div>
+        <div id="searchHistoryPanel" class="searchHistoryPanel hidden" aria-label="搜索历史"></div>
+      </div>
+
+      <div id="desktopBackWrap" class="desktopBackWrap">
+        <button id="desktopBackBtn" class="desktopBackBtn hidden" type="button" aria-label="返回上一层">
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="15" height="15"><path d="M15.5 4.5 8 12l7.5 7.5 1-1L10 12l6.5-6.5-1-1Z" fill="currentColor"/></svg>
+          返回
+        </button>
       </div>
 
       <div class="nav-list" role="navigation" aria-label="内容导航">
@@ -78,7 +86,10 @@
     </nav>
 
     <header class="mobile-topbar" aria-label="移动端导航">
-      <button id="mobileMenuBtn" class="iconBtn mobileMenuBtn" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="mobileDrawer">
+      <button id="mobileBackBtn" class="iconBtn mobileBackBtn hidden" type="button" aria-label="返回" onclick="goBack()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5 8 12l7.5 7.5 1-1L10 12l6.5-6.5-1-1Z" fill="currentColor"/></svg>
+      </button>
+      <button id="mobileMenuBtn" class="iconBtn mobileMenuBtn" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="sidebar">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h18v1.5H3v-1.5Zm0 5h18v1.5H3v-1.5Zm0 5h12v1.5H3v-1.5Z" fill="currentColor"/></svg>
       </button>
       <div class="mobile-topbar-title" id="mobileTopbarTitle">发现</div>
@@ -92,6 +103,21 @@
     <div id="queueDrawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
 
     <main class="main-content">
+      <div class="mobile-search-area">
+        <div class="mobile-search-shell">
+          <svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.42 1.06-1.06-4.42-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z" fill="currentColor"/></svg>
+          <input id="mobileQ" type="search" placeholder="搜索" autocomplete="off" aria-label="搜索" />
+          <button id="mobileSearchClear" type="button" class="searchClearBtn" aria-label="清除" style="display:none">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+          </button>
+        </div>
+        <div id="mobileSearchTypeTabs" class="mobile-search-type-tabs hidden">
+          <button class="tab mobile-tab active" data-type="tracks" type="button">单曲</button>
+          <button class="tab mobile-tab" data-type="albums" type="button">专辑</button>
+          <button class="tab mobile-tab" data-type="artists" type="button">歌手</button>
+          <button class="tab mobile-tab" data-type="playlists" type="button">歌单</button>
+        </div>
+      </div>
       <div class="content-header">
         <h1 id="contentTitle">发现</h1>
         <div id="searchTypeTabs" class="search-type-tabs">
@@ -105,30 +131,7 @@
       <div id="results" class="results"></div>
     </main>
 
-    <aside id="mobileNavDrawer" class="mobile-drawer" data-drawer="main" aria-hidden="true" aria-label="主导航 (移动)">
-      <div class="mobile-drawer-header">
-        <span class="mobile-drawer-title">QDP</span>
-        <button class="iconBtn mobile-drawer-close" type="button" aria-label="关闭菜单">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
-        </button>
-      </div>
-      <div class="mobile-drawer-body">
-        <div class="search-wrap">
-          <div class="search-shell">
-            <svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.42 1.06-1.06-4.42-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z" fill="currentColor"/></svg>
-            <input id="qMobile" type="search" placeholder="搜索" autocomplete="off" aria-label="搜索 (移动)" />
-          </div>
-        </div>
-        <nav class="mobile-nav-list" aria-label="内容导航 (移动)">
-          <a class="navItem active mobileNavItem" data-target="discover" href="javascript:void(0)"><span>发现</span></a>
-          <a class="navItem mobileNavItem" data-target="search" href="javascript:void(0)"><span>搜索结果</span></a>
-          <a class="navItem mobileNavItem" data-target="playlists" href="javascript:void(0)"><span>我的歌单</span></a>
-          <a class="navItem mobileNavItem" data-target="account" href="javascript:void(0)"><span>账户</span></a>
-        </nav>
-      </div>
-    </aside>
-
-    <aside id="sidebar" class="queue-panel" aria-label="播放队列与歌单" data-drawer="queue">
+        <aside id="sidebar" class="queue-panel" aria-label="播放队列与歌单" data-drawer="queue">
       <div class="sidePanelShell">
         <div class="sideCard sidePanel">
           <div class="sideHeader">
@@ -308,11 +311,9 @@
 
   <script>
   document.addEventListener('DOMContentLoaded', function(){
-    var sidebar = document.getElementById('sidebar');
     var navQueue = document.getElementById('navQueue');
     var navPlaylists = document.getElementById('navPlaylists');
     var navDiscover = document.getElementById('navDiscover');
-    var dockMenuBtn = document.getElementById('dockMenuBtn');
     var avatarBtn = document.getElementById('avatarBtn');
     var avatarDropdown = document.getElementById('avatarDropdown');
     var navSearch = document.getElementById('navSearch');
@@ -321,11 +322,17 @@
     var volumeToggle = document.querySelector('[data-volume-toggle]');
 
     function toggleSidebar() {
-      if (sidebar) sidebar.classList.toggle('open');
+      if (window.innerWidth <= 980) {
+        if (typeof setMobileQueueDrawer === 'function') {
+          setMobileQueueDrawer(true);
+        }
+      } else {
+        var sidebar = document.getElementById('sidebar');
+        if (sidebar) sidebar.classList.toggle('open');
+      }
     }
     if (navQueue) navQueue.addEventListener('click', toggleSidebar);
     if (navPlaylists) navPlaylists.addEventListener('click', toggleSidebar);
-    if (dockMenuBtn) dockMenuBtn.addEventListener('click', toggleSidebar);
 
     if (navDiscover) navDiscover.addEventListener('click', function(){
       if (typeof loadDiscoverRandom === 'function') loadDiscoverRandom(true);
