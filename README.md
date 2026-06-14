@@ -187,19 +187,22 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 - Live demo: https://b2ab7e62.qdp-webapp-demo.pages.dev
 - Deployment URL: https://b2ab7e62.qdp-webapp-demo.pages.dev
-- Latest UI: v2.12.0 (Apple Music style, search clear X inside shell, single-row bulk download bar)
-- Last refreshed: 2026-06-14
+- Latest UI: v2.13.0 (refresh-safe app routes, mobile search chips, search history, artist-page multi-breakpoint cleanup)
+- Last refreshed: 2026-06-15
 
 ### Webapp Preview
 
-Search results with new transparent X inside the search shell:
+Desktop search route with persistent URL and restored artist results:
 
 ![qdp webapp preview](docs/screenshots/webapp-home.jpg)
 
-Album detail with the new Apple Music style bulk download bar
-(`☐ 全选 · 已选 N 首 · [⬇ 下载] [+ 加入歌单] · 清空`, single row, capsule buttons, glass blur):
+Artist detail with back navigation, sticky paging info, and denser album grid:
 
-![qdp webapp album detail](docs/screenshots/webapp-album.jpg)
+![qdp webapp artist detail](docs/screenshots/webapp-album.jpg)
+
+Mobile search now has its own visible search box and focus-triggered type chips:
+
+![qdp webapp mobile search](docs/screenshots/webapp-mobile-search.jpg)
 
 ### TUI Preview
 
