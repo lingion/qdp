@@ -213,4 +213,4 @@ python -m PyInstaller --clean --noconfirm qdp.spec
 - **Lingion**：主线集成、基础设施、部署和仓库质量
 - **Kerry1020**：网页应用、UI、浏览器端行为和前端维护
 
-> 单一源：`lingion/qdp` 和 `Kerry1020/qdp` 跟踪同一个 `main` 分支，始终保持同步。
+> 仓库说明：`lingion/qdp` 是主仓库。`Kerry1020/qdp` 是镜像，跟主仓库保持同步。Kerry1020 是具有写权限的协作者。
