@@ -75,22 +75,24 @@ async function fetchAlbum(id){
   console.debug('[album-cache] miss', id);
   return data;
 }
-async function openAlbum(id){
-  if(state.currentView) state.history.push(state.currentView);
+async function openAlbum(id, options = {}){
+  if(state.currentView && !options.preserveHistory) state.history.push(state.currentView);
+  if(!options.skipRoute) setRoute({ kind: 'album', id }, options.replaceRoute ? 'replace' : 'push');
   setView(()=>renderLoadingSkeleton('cards'));
   try{
     const a = await fetchAlbum(id);
     const tracks = a?.tracks || [];
     if(!tracks.length){
       renderEmpty('Album has no tracks.');
-      state.currentView = () => openAlbum(id);
+      state.currentView = () => openAlbum(id, { preserveHistory: true, skipRoute: true });
       return;
     }
     renderTrackList(a?.title || 'Album', a?.artist || '', a?.image || (tracks[0]||{}).image, tracks, { sourceType: 'album', sourceChip: 'Album', sourceLabel: `来自 Album · ${a?.title || 'Album'}`, audioSpecSource: a, decorate: (root)=>{
       const actions = root.querySelector('.detailActions');
       actions.appendChild(makeAlbumDownloadLink(a, 'Download album'));
     } });
-    state.currentView = () => openAlbum(id);
+    state.currentView = () => openAlbum(id, { preserveHistory: true, skipRoute: true });
+    syncMobileTopbar();
   }catch(err){
     renderEmpty(`加载失败: ${err.message}`);
     showToast(`加载失败: ${err.message}`, 'error');
@@ -98,22 +100,24 @@ async function openAlbum(id){
 }
 // ═══ Playlist ═══
 
-async function openPlaylist(id){
-  if(state.currentView) state.history.push(state.currentView);
+async function openPlaylist(id, options = {}){
+  if(state.currentView && !options.preserveHistory) state.history.push(state.currentView);
+  if(!options.skipRoute) setRoute({ kind: 'playlist', id }, options.replaceRoute ? 'replace' : 'push');
   setView(()=>renderLoadingSkeleton('cards'));
   try{
     const p = await api(`/api/playlist?id=${encodeURIComponent(id)}`);
     const tracks = p?.tracks || [];
     if(!tracks.length){
       renderEmpty('Playlist has no tracks.');
-      state.currentView = () => openPlaylist(id);
+      state.currentView = () => openPlaylist(id, { preserveHistory: true, skipRoute: true });
       return;
     }
     renderTrackList(p?.title || 'Playlist', p?.owner || '', p?.image || (tracks[0]||{}).image, tracks, { sourceType: 'remote-playlist', sourceChip: 'Playlist', sourceLabel: `来自 Qobuz Playlist · ${p?.title || 'Playlist'}`, audioSpecSource: p, decorate: (root)=>{
       const actions = root.querySelector('.detailActions');
       actions.appendChild(makeIconButton('download', ()=>triggerBulkDownload(tracks), 'Download all'));
     } });
-    state.currentView = () => openPlaylist(id);
+    state.currentView = () => openPlaylist(id, { preserveHistory: true, skipRoute: true });
+    syncMobileTopbar();
   }catch(err){
     renderEmpty(`加载失败: ${err.message}`);
     showToast(`加载失败: ${err.message}`, 'error');
@@ -145,8 +149,9 @@ async function collectArtistTracks(artist){
   setCachedMapValue(state.artistCache, ARTIST_CACHE_KEY, artist.id, artist);
   return merged;
 }
-async function openArtist(id){
-  if(state.currentView) state.history.push(state.currentView);
+async function openArtist(id, options = {}){
+  if(state.currentView && !options.preserveHistory) state.history.push(state.currentView);
+  if(!options.skipRoute) setRoute({ kind: 'artist', id }, options.replaceRoute ? 'replace' : 'push');
   setView(()=>renderLoadingSkeleton('cards'));
   try{
     const a = await fetchArtist(id);
@@ -156,61 +161,83 @@ async function openArtist(id){
     const detail = document.createElement('div');
     detail.className = 'detail';
     const artistSpec = formatAudioSpec((a?.albums || []).find((al)=>formatAudioSpec(al)) || null);
-    const cacheTag = a?.cache?.hit ? ' · cached' : '';
-    const artistSub = joinMetaParts([`${(a?.albums || []).length} albums`, artistSpec]) + cacheTag;
+    const artistSub = joinMetaParts([`${(a?.albums || []).length} 张专辑`, artistSpec]);
     detail.innerHTML = `
-      <div class="detailHead">
-        <img class="detailCover" src="${esc(rewriteImg(a?.image || ''))}" alt="" onerror="this.onerror=null;this.src='/app/placeholder.svg'" />
+      <div class="detailHead detailHeadArtist">
+        <img class="detailCover detailCoverArtist" src="${esc(rewriteImg(a?.image || ''))}" alt="" onerror="this.onerror=null;this.src='/app/placeholder.svg'" />
         <div class="detailMeta">
-          <div class="detailMainRow">
+          <div class="detailEyebrow">歌手</div>
+          <div class="detailMainRow detailMainRowArtist">
             <div class="detailInfo">
               <div class="detailTitle"></div>
               <div class="detailSub"></div>
             </div>
             <div class="detailRight">
-              <div class="detailActions">
+              <div class="detailActions detailActionsPrimary">
               </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="tracklist" id="artistAlbums"></div>
+      <div class="tracklist artistAlbumsGrid" id="artistAlbums"></div>
     `;
     detail.querySelector('.detailTitle').textContent = a?.name || 'Artist';
     detail.querySelector('.detailSub').textContent = artistSub;
     detail.querySelector('.detailSub').title = artistSub;
     root.appendChild(detail);
+    const topbarTitle = $('mobileTopbarTitle');
+    if(topbarTitle) topbarTitle.textContent = a?.name || 'Artist';
 
     const albumWrap = detail.querySelector('#artistAlbums');
     const albums = a?.albums || [];
     if(!albums.length){
       albumWrap.innerHTML = '<div class="empty">No albums for this artist.</div>';
-      state.currentView = () => openArtist(id);
+      state.currentView = () => openArtist(id, { preserveHistory: true, skipRoute: true });
       return;
     }
-    for(const al of albums){
-      const audioSpec = formatAudioSpec(al);
-      albumWrap.appendChild(card(
-        al.image,
-        al.title,
-        joinMetaParts([a?.name || '', al.year]),
-        ()=>openAlbum(al.id),
-        [
-          makeAlbumDownloadLink(al, 'Download album'),
-          makeIconButton('play', ()=>playAlbumNow(al.id), 'Play album'),
-          makeIconButton('plus', async ()=>{
-            const full = await fetchAlbum(al.id);
-            const tracks = (full?.tracks||[]).map(normTrack).filter(Boolean);
-            choosePlaylistForTracks(tracks);
-          }, 'Add to playlist')
-        ],
-        {
-          audioSpec,
-          audioSpecSource: al,
-          entity: al,
-        }
-      ));
-    }
+    const PAGE = 60;
+    const totalPages = Math.max(1, Math.ceil(albums.length / PAGE));
+    let page = 0;
+    const grid = albumWrap;
+    const counter = document.createElement('div');
+    counter.className = 'artistAlbumsCounter';
+    grid.parentNode.insertBefore(counter, grid.nextSibling);
+    const render = () => {
+      grid.innerHTML = '';
+      const slice = albums.slice(page * PAGE, page * PAGE + PAGE);
+      for(const al of slice){
+        const albumCard = card(
+          al.image,
+          al.title,
+          joinMetaParts([a?.name || '']),
+          ()=>openAlbum(al.id),
+          [
+            makeAlbumDownloadLink(al, 'Download album'),
+            makeIconButton('play', ()=>playAlbumNow(al.id), 'Play album'),
+            makeIconButton('plus', async ()=>{
+              const full = await fetchAlbum(al.id);
+              const tracks = (full?.tracks||[]).map(normTrack).filter(Boolean);
+              choosePlaylistForTracks(tracks);
+            }, 'Add to playlist')
+          ],
+          {
+            audioSpec: formatAudioSpec(al),
+            audioSpecSource: al,
+            entity: al,
+          }
+        );
+        albumCard.classList.add('artistAlbumCard');
+        grid.appendChild(albumCard);
+      }
+      counter.innerHTML = totalPages > 1
+        ? `<span>显示 ${page * PAGE + 1}–${Math.min(albums.length, page * PAGE + PAGE)} / ${albums.length} 张专辑</span>
+           <button type="button" class="pagerBtn" id="artistPrevPage" ${page === 0 ? 'disabled' : ''}>上一页</button>
+           <button type="button" class="pagerBtn" id="artistNextPage" ${page >= totalPages - 1 ? 'disabled' : ''}>下一页</button>`
+        : `<span>共 ${albums.length} 张专辑</span>`;
+      counter.querySelector('#artistPrevPage')?.addEventListener('click', ()=>{ if(page>0){ page--; render(); grid.scrollIntoView({behavior:'smooth', block:'start'}); }});
+      counter.querySelector('#artistNextPage')?.addEventListener('click', ()=>{ if(page<totalPages-1){ page++; render(); grid.scrollIntoView({behavior:'smooth', block:'start'}); }});
+    };
+    render();
     const artistActions = detail.querySelector('.detailActions');
     artistActions.appendChild(makeIconButton('play', async ()=>{
       const merged = await collectArtistTracks(a);
@@ -219,7 +246,8 @@ async function openArtist(id){
         await playCurrent('artist-play-all');
       }
     }, 'Play all'));
-    state.currentView = () => openArtist(id);
+    state.currentView = () => openArtist(id, { preserveHistory: true, skipRoute: true });
+    syncMobileTopbar();
   }catch(err){
     renderEmpty(`加载失败: ${err.message}`);
     showToast(`加载失败: ${err.message}`, 'error');
@@ -440,7 +468,7 @@ function appendSearchCards(root, items){
         makeIconButton('plus', ()=>choosePlaylistForTrack(t), 'Add to playlist'),
       ], { audioSpec: formatAudioSpec(t), audioSpecSource: t, entity: t }));
     }else if(state.type === 'albums'){
-      root.appendChild(card(it.image, it.title, joinMetaParts([it.artist, it.year]), ()=>openAlbum(it.id), [
+      root.appendChild(card(it.image, it.title, joinMetaParts([it.artist]), ()=>openAlbum(it.id), [
         makeAlbumDownloadLink(it, 'Download album'),
         makeIconButton('play', ()=>playAlbumNow(it.id), 'Play album'),
         makeIconButton('plus', async ()=>{ const full = await fetchAlbum(it.id); const tracks = (full?.tracks||[]).map(normTrack).filter(Boolean); choosePlaylistForTracks(tracks); }, 'Add to playlist'),
@@ -449,7 +477,7 @@ function appendSearchCards(root, items){
       root.appendChild(card(
         it.image,
         it.name,
-        `${it.albums_count || ''} albums`,
+        `${it.albums_count || ''} 张专辑`,
         ()=>openArtist(it.id),
         [
           makeIconButton('play', ()=>playArtistNow(it), 'Play artist'),
@@ -465,7 +493,7 @@ function appendSearchCards(root, items){
         }
       ));
     }else if(state.type === 'playlists'){
-      root.appendChild(card(it.image, it.title, joinMetaParts([it.owner, it.tracks_count ? `${it.tracks_count} tracks` : '']), ()=>openPlaylist(it.id), [
+      root.appendChild(card(it.image, it.title, joinMetaParts([it.owner, it.tracks_count ? `${it.tracks_count} 首` : '']), ()=>openPlaylist(it.id), [
         makeIconButton('download', async ()=>{
           const full = await api(`/api/playlist?id=${encodeURIComponent(it.id)}`);
           triggerBulkDownload(full?.tracks || []);
@@ -568,17 +596,20 @@ async function openByUrl(url){
 
 let _searchSeq = 0;
 
-async function search(){
+async function search(options = {}){
   const q = ($('q').value || '').trim();
   state.q = q;
   state.searchOffset = 0;
   state.searchHasMore = false;
   if(!q){
-    clearHistory();
-    await loadDiscoverRandom();
+    if(!options.skipRoute) setRoute({ kind: 'discover' }, options.replaceRoute ? 'replace' : 'push');
+    if(!options.preserveHistory) clearHistory();
+    await loadDiscoverRandom(true);
     return;
   }
-  clearHistory();
+  pushSearchHistory(q);
+  if(!options.skipRoute) setRoute({ kind: 'search', q, type: state.type }, options.replaceRoute ? 'replace' : 'push');
+  if(!options.preserveHistory) clearHistory();
   renderLoadingSkeleton('cards');
 
   if($('urlMode').checked){
