@@ -160,7 +160,7 @@ async function openArtist(id){
     const artistSub = joinMetaParts([`${(a?.albums || []).length} albums`, artistSpec]) + cacheTag;
     detail.innerHTML = `
       <div class="detailHead">
-        <img class="detailCover" src="${esc(a?.image || '')}" alt="" onerror="this.onerror=null;this.src='/app/placeholder.svg'" />
+        <img class="detailCover" src="${esc(rewriteImg(a?.image || ''))}" alt="" onerror="this.onerror=null;this.src='/app/placeholder.svg'" />
         <div class="detailMeta">
           <div class="detailMainRow">
             <div class="detailInfo">

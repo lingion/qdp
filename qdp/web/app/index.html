@@ -3,233 +3,324 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>QDP Web Player</title>
+  <title>QDP</title>
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/app/app.css?v=1.7.2" />
+  <link rel="stylesheet" href="/app/app.css?v=2.12.0" />
 </head>
 <body>
-  <a href="#results" class="skip-link" style="position:absolute;left:-9999px;top:0;z-index:9999;background:var(--accent,#4f8cff);color:#fff;padding:8px 16px;border-radius:0 0 8px 0;text-decoration:none;font-size:14px" onfocus="this.style.left='12px'" onblur="this.style.left='-9999px'">Skip to content</a>
   <div id="toastContainer"></div>
-  <div id="app">
-    <div class="appShell">
-      <header class="topbar">
-        <div class="topbarMain topbarMinimal">
-          <div class="searchPanel topbarSearchPanel">
-            <div class="search">
-              <input id="q" type="search" placeholder="搜索音乐..." aria-label="搜索音乐" autocomplete="off" />
-              <label class="urlbox"><input id="urlMode" type="checkbox" /> URL</label>
-              <button id="go">发现</button>
-              <div id="searchTypeTabs" class="searchTypeTabs hidden">
-                <button class="tab active" data-type="tracks">Tracks</button>
-                <button class="tab" data-type="albums">Albums</button>
-                <button class="tab" data-type="artists">Artists</button>
-                <button class="tab" data-type="playlists">Playlists</button>
-              </div>
-              <button id="mobileSidebarToggle" class="btn iconBtn mobileSidebarToggle hidden" type="button" title="Queue / Playlists" aria-label="Toggle sidebar" aria-expanded="false"><span class="icon" data-icon="menu"></span></button>
-              <button id="mobileSettingsBtn" class="btn iconBtn mobileSettingsBtn hidden" type="button" title="设置" aria-label="Settings"><span class="icon" data-icon="settings"></span></button>
-            </div>
-          </div>
 
-          <div class="topbarMetaInline">
-            <div class="accountInlineWrap">
-              <select id="accountSelect" class="accountSelect">
+  <div id="app">
+    <nav class="sidebar-nav" aria-label="主导航">
+      <div class="search-wrap">
+        <div class="search-shell">
+          <svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.42 1.06-1.06-4.42-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z" fill="currentColor"/></svg>
+          <input id="q" type="search" placeholder="搜索" autocomplete="off" aria-label="搜索" />
+          <button id="searchClear" type="button" class="searchClearBtn" aria-label="清除" style="display:none">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+          </button>
+          <button id="go" type="button" aria-hidden="true">搜索</button>
+        </div>
+      </div>
+
+      <div class="nav-list" role="navigation" aria-label="内容导航">
+        <a class="navItem active" id="navDiscover" href="javascript:void(0)">发现</a>
+        <a class="navItem" id="navSearch" href="javascript:void(0)">搜索结果</a>
+        <a class="navItem" id="navQueue" href="javascript:void(0)">播放队列</a>
+        <a class="navItem" id="navPlaylists" href="javascript:void(0)">我的歌单</a>
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sidebar-footer">
+        <div class="avatar-wrap">
+          <button class="avatar" id="avatarBtn" type="button" aria-label="账户与设置">
+            <span id="me">U</span>
+          </button>
+          <div class="avatar-dropdown" id="avatarDropdown" style="display:none">
+            <div class="dropdown-section">
+              <div class="dropdown-label">账户</div>
+              <select id="accountSelect" class="dropdownSelect">
                 <option value="">Loading accounts…</option>
               </select>
             </div>
-            <div id="cacheInfo" class="cacheInfo">
-              <span id="cacheStatsText" class="cacheStatsText">缓存 …</span>
-              <button id="clearCacheAudio" class="btn small cacheBtn" title="清除音频缓存">清除音频</button>
-              <button id="clearCacheAll" class="btn small cacheBtn" title="清除全部缓存">清除全部</button>
+            <div class="dropdown-section">
+              <div class="dropdown-label">音质</div>
+              <select id="qualitySelect" class="dropdownSelect">
+                <option value="5">MP3</option>
+                <option value="6">FLAC</option>
+                <option value="7">Hi-Res 96k</option>
+                <option value="27">MAX</option>
+              </select>
             </div>
-            <div id="me" class="me">…</div>
-            <div id="appVersion" class="appVersion"></div>
-            <label class="pill qualityPill mobileOnlyQuality">Quality <select id="qualitySelectMobile" class="qualitySelect"><option value="5">MP3</option><option value="6">FLAC</option><option value="7">Hi-Res 96k</option><option value="27">MAX</option></select></label>
-            <div id="appVersionMobile" class="appVersion mobileAppVersion"></div>
-          </div>
-        </div>
-      </header>
-
-      <main class="layout">
-        <section class="main">
-          <section class="contentBoard contentBoardPrimary">
-            <div class="boardTopRow">
-              <div class="toolbarIntro toolbarIntroCompact">
-                <div class="toolbarTitle" id="contentTitle">搜索或发现音乐</div>
-              </div>
-
-              <button id="backTop" class="btn small hidden">Back</button>
+            <div class="dropdown-section mobile-quality-clone">
+              <div class="dropdown-label">移动端音质</div>
+              <select id="qualitySelectMobile" class="dropdownSelect">
+                <option value="5">MP3</option>
+                <option value="6">FLAC</option>
+                <option value="7">Hi-Res 96k</option>
+                <option value="27">MAX</option>
+              </select>
             </div>
-
-            <section id="results" class="results" tabindex="-1">
-              <div class="empty">Search something.</div>
-            </section>
-          </section>
-        </section>
-
-        <aside class="sidebar" id="sidebar">
-          <div class="mobileSidebarHead">
-            <div class="mobileSidebarTabs" role="tablist" aria-label="Queue and playlists">
-              <button id="mobileTabQueue" class="mobileSidebarTab active" data-mobile-tab="queue" aria-selected="true">Queue</button>
-              <button id="mobileTabPlaylists" class="mobileSidebarTab" data-mobile-tab="playlists" aria-selected="false">Playlists</button>
-            </div>
-            <button id="mobileSidebarClose" class="btn small mobileSidebarClose" aria-label="Close panel">Done</button>
-          </div>
-
-          <div class="sideCard sidePanel sidePanelQueue" data-side-panel="queue">
-            <div class="sideHeader">
-              <div class="sideTitleWrap"><button id="queueSectionToggle" class="sectionToggle active" type="button" aria-expanded="true"><span class="sideTitle">Queue</span><span class="sectionChevron" aria-hidden="true">⌄</span></button><div id="queueSourceBadge" class="sourceBadge hidden"></div></div>
-              <div class="sideActions">
-                <button id="playQueue" class="btn small iconBtn" title="Play queue">
-                  <span class="icon" data-icon="play"></span>
-                </button>
-                <button id="shuffle" class="btn small iconBtn" title="Shuffle">
-                  <span class="icon" data-icon="shuffle"></span>
-                </button>
-                <button id="repeat" class="btn small iconBtn" title="Repeat off">
-                  <span class="icon" data-icon="repeat"></span>
-                </button>
-                <button id="clearQueue" class="btn small" title="Clear queue">Clear</button>
-                <button id="newPlaylist" class="btn small">+ Playlist</button>
-              </div>
-            </div>
-            <div id="queue" class="queue sectionBody emptyMini">No queue yet.</div>
-          </div>
-
-          <div class="sideCard sidePanel sidePanelPlaylists" data-side-panel="playlists">
-            <div class="sideHeader">
-              <button id="playlistsSectionToggle" class="sectionToggle" type="button" aria-expanded="false"><span class="sideTitle">My Playlists</span><span class="sectionChevron" aria-hidden="true">⌄</span></button>
-              <div class="sideActions playlistTools">
-                <button id="importPlaylists" class="btn small">Import JSON</button>
-                <button id="exportAllPlaylists" class="btn small">Export All</button>
-                <input id="playlistImportInput" class="fileInput" type="file" accept="application/json,.json" />
-              </div>
-            </div>
-            <div id="myPlaylists" class="playlists sectionBody collapsed emptyMini">No playlists yet.</div>
-          </div>
-        </aside>
-        <div id="mobileSidebarOverlay" class="mobileSidebarOverlay" aria-hidden="true"></div>
-      </main>
-    </div>
-
-    <footer class="player playerMinimal" id="player">
-      <div class="playerCover">
-        <img id="cover" class="cover" alt="Album cover" src="/app/placeholder.svg" />
-      </div>
-      <div class="playerMeta">
-        <div id="title" class="title">—</div>
-        <div id="subtitle" class="subtitle">—</div>
-        <div class="playerQueueInfo" id="playerQueueInfo">—</div>
-        <div id="nowSourcePill" class="sourcePill hidden"></div>
-      </div>
-      <div class="playerCtrl">
-        <button id="prev" class="btn iconBtn" title="Previous" aria-label="Previous track"><span class="icon" data-icon="prev"></span></button>
-        <button id="play" class="btn iconBtn primary" title="Play / Pause" aria-label="Play or pause"><span class="icon" data-icon="play"></span></button>
-        <button id="next" class="btn iconBtn" title="Next" aria-label="Next track"><span class="icon" data-icon="next"></span></button>
-        <div class="volumeDockWrap">
-          <button id="mute" class="btn iconBtn" title="Volume" aria-label="Mute or unmute"><span class="icon" data-icon="volume"></span></button>
-          <div id="volumePopover" class="volumePopover hidden" aria-hidden="true">
-            <div class="volumePopoverInner">
-              <button id="volumeMuteToggle" class="btn small volumeMuteToggle" type="button">静音</button>
-              <div class="volumeRail">
-                <input id="volume" class="volumeSliderVertical" type="range" min="0" max="100" value="100" aria-label="Volume" />
-                <div id="volumeValue" class="volumeValue">100%</div>
+            <div class="dropdown-section cache-block" id="cacheInfo">
+              <div class="dropdown-label">缓存</div>
+              <div id="cacheStatsText" class="cacheStatsText">缓存统计加载中…</div>
+              <div class="cache-actions">
+                <button id="clearCacheAudio" class="btn small" type="button">清除音频</button>
+                <button id="clearCacheAll" class="btn small" type="button">清除全部</button>
               </div>
             </div>
           </div>
         </div>
-        <label class="pill qualityPill">Q
-          <select id="qualitySelect" class="qualitySelect">
-            <option value="5">MP3</option>
-            <option value="6">FLAC</option>
-            <option value="7">Hi-Res 96k</option>
-            <option value="27">MAX</option>
-          </select>
-        </label>
-        <button id="shuffleMain" class="btn iconBtn" title="Shuffle mode" aria-label="Shuffle"><span class="icon" data-icon="shuffle"></span></button>
-        <button id="repeatMain" class="btn iconBtn" title="Repeat mode" aria-label="Repeat"><span class="icon" data-icon="repeat"></span></button>
-        <button id="dockMenuBtn" class="btn iconBtn dockMenuBtn" type="button" title="Queue / Playlists"><span class="icon" data-icon="menu"></span></button>
       </div>
-      <div class="playerProgress">
-        <div class="progress">
-          <input id="seek" type="range" min="0" max="1000" value="0" />
+    </nav>
+
+    <main class="main-content">
+      <div class="content-header">
+        <h1 id="contentTitle">发现</h1>
+        <div id="searchTypeTabs" class="search-type-tabs">
+          <button class="tab active" data-type="tracks" type="button">单曲</button>
+          <button class="tab" data-type="albums" type="button">专辑</button>
+          <button class="tab" data-type="artists" type="button">歌手</button>
+          <button class="tab" data-type="playlists" type="button">歌单</button>
         </div>
-        <div class="playerInfoRow">
-          <div class="time"><span id="tcur">0:00</span> / <span id="tdur">0:00</span></div>
-          <div class="statusStack">
-            <div id="qualitySwitchBadge" class="qualitySwitchBadge hidden" aria-live="polite"></div>
-            <div id="playerStatus" class="playerStatus">空闲</div>
+        <label class="urlbox hidden"><input id="urlMode" type="checkbox" /> URL</label>
+      </div>
+      <div id="results" class="results"></div>
+    </main>
+
+    <aside id="sidebar" class="queue-panel" aria-label="播放队列与歌单">
+      <div class="sidePanelShell">
+        <div class="sideCard sidePanel">
+          <div class="sideHeader">
+            <div class="sideTitleWrap">
+              <button id="queueSectionToggle" class="sectionToggle" type="button" aria-expanded="true">
+                <span class="sideTitle">播放队列</span>
+                <span class="sectionChevron" aria-hidden="true">⌄</span>
+              </button>
+              <div id="queueSourceBadge" class="sourceBadge">队列</div>
+            </div>
+            <div class="sideActions">
+              <button id="playQueue" class="btn small" type="button">播放</button>
+              <button id="clearQueue" class="btn small" type="button">清空</button>
+            </div>
+          </div>
+          <div id="queue" class="sectionBody"></div>
+        </div>
+
+        <div class="sideCard sidePanel">
+          <div class="sideHeader">
+            <div class="sideTitleWrap">
+              <button id="playlistsSectionToggle" class="sectionToggle" type="button" aria-expanded="true">
+                <span class="sideTitle">我的歌单</span>
+                <span class="sectionChevron" aria-hidden="true">⌄</span>
+              </button>
+            </div>
+            <div class="sideActions playlist-actions">
+              <button id="newPlaylist" class="btn small" type="button">新建</button>
+              <button id="importPlaylists" class="btn small" type="button">导入</button>
+              <button id="exportAllPlaylists" class="btn small" type="button">导出</button>
+            </div>
+          </div>
+          <input id="playlistImportInput" type="file" accept="application/json,.json" />
+          <div id="myPlaylists" class="sectionBody"></div>
+        </div>
+      </div>
+    </aside>
+
+    <footer id="player" class="player-dock">
+      <div class="dock-left">
+        <img id="cover" class="cover" alt="封面" src="/app/placeholder.svg" />
+        <div class="titleStack player-meta-stack">
+          <div id="title">未播放</div>
+          <div id="subtitle">选择一首歌开始播放</div>
+          <div id="playerQueueInfo">&nbsp;</div>
+          <div id="nowSourcePill" class="sourcePill"></div>
+        </div>
+      </div>
+
+      <div class="dock-center">
+        <div class="dock-controls">
+          <button id="shuffleMain" class="iconBtn" type="button" aria-label="随机播放">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-1.5V5.56l-4.06 4.06-1.06-1.06L18.44 4.5H16V3ZM4 7h2.7c1.13 0 2.2.45 3 1.24l1.82 1.82-1.06 1.06-1.82-1.82A2.74 2.74 0 0 0 6.7 8.5H4V7Zm10.38 5.56 1.06 1.06-4.88 4.88A4.22 4.22 0 0 1 7.56 20H4v-1.5h3.56c.72 0 1.4-.28 1.91-.79l4.91-4.91ZM18.44 19.5l-4.06-4.06 1.06-1.06 4.06 4.06V16H21v5h-5v-1.5h2.44ZM4 15.5v-1.5h2.7c.54 0 1.06-.16 1.5-.47l1.4 1.08c-.83.57-1.79.89-2.9.89H4Z" fill="currentColor"/></svg>
+          </button>
+          <button id="shuffle" class="iconBtn ghost-compat" type="button" aria-label="随机播放（兼容）">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-1.5V5.56l-4.06 4.06-1.06-1.06L18.44 4.5H16V3ZM4 7h2.7c1.13 0 2.2.45 3 1.24l1.82 1.82-1.06 1.06-1.82-1.82A2.74 2.74 0 0 0 6.7 8.5H4V7Zm10.38 5.56 1.06 1.06-4.88 4.88A4.22 4.22 0 0 1 7.56 20H4v-1.5h3.56c.72 0 1.4-.28 1.91-.79l4.91-4.91ZM18.44 19.5l-4.06-4.06 1.06-1.06 4.06 4.06V16H21v5h-5v-1.5h2.44ZM4 15.5v-1.5h2.7c.54 0 1.06-.16 1.5-.47l1.4 1.08c-.83.57-1.79.89-2.9.89H4Z" fill="currentColor"/></svg>
+          </button>
+          <button id="prev" class="iconBtn" type="button" aria-label="上一首">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h1.5v14H6V5Zm11.5 1.7v10.6c0 .63-.7 1.01-1.24.68l-7.52-5.3a.82.82 0 0 1 0-1.36l7.52-5.3c.54-.33 1.24.05 1.24.68Z" fill="currentColor"/></svg>
+          </button>
+          <button id="play" class="iconBtn primary play-btn" type="button" aria-label="播放或暂停">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72c0 .78.87 1.26 1.54.84l10.79-6.86c.62-.39.62-1.29 0-1.68L9.54 4.3C8.87 3.88 8 4.36 8 5.14Z" fill="currentColor"/></svg>
+          </button>
+          <button id="next" class="iconBtn" type="button" aria-label="下一首">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 5H18v14h-1.5V5ZM6.5 6.7v10.6c0 .63.7 1.01 1.24.68l7.52-5.3a.82.82 0 0 0 0-1.36l-7.52-5.3c-.54-.33-1.24.05-1.24.68Z" fill="currentColor"/></svg>
+          </button>
+          <button id="repeatMain" class="iconBtn" type="button" aria-label="循环">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6.5h-9a2.5 2.5 0 0 0-2.5 2.5v1H3.5V9A4 4 0 0 1 7.5 5h9V2.75L21 6.5l-4.5 3.75V6.5Zm-9 11h9a2.5 2.5 0 0 0 2.5-2.5v-1h1.5v1a4 4 0 0 1-4 4h-9v2.25L3 17.5l4.5-3.75V17.5Z" fill="currentColor"/></svg>
+          </button>
+          <button id="repeat" class="iconBtn ghost-compat" type="button" aria-label="循环（兼容）">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6.5h-9a2.5 2.5 0 0 0-2.5 2.5v1H3.5V9A4 4 0 0 1 7.5 5h9V2.75L21 6.5l-4.5 3.75V6.5Zm-9 11h9a2.5 2.5 0 0 0 2.5-2.5v-1h1.5v1a4 4 0 0 1-4 4h-9v2.25L3 17.5l4.5-3.75V17.5Z" fill="currentColor"/></svg>
+          </button>
+        </div>
+        <div class="dock-progress">
+          <span id="tcur">0:00</span>
+          <div class="seek-wrap">
+            <div class="seek-track"><div class="progressFill"></div></div>
+            <input id="seek" type="range" min="0" max="1000" value="0" aria-label="播放进度" />
+          </div>
+          <span id="tdur">0:00</span>
+        </div>
+      </div>
+
+      <div class="dock-right">
+        <div id="qualitySwitchBadge">音质切换</div>
+        <div id="playerStatus">空闲</div>
+        <div class="volume-wrap">
+          <button class="iconBtn" type="button" aria-label="音量" data-volume-toggle>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h4.2L13 5.3v13.4l-4.8-4.2H4v-5Zm11.5-1.7a5.5 5.5 0 0 1 0 8.4l-1.02-1.1a4 4 0 0 0 0-6.2l1.02-1.1Zm2.8-2.86a9.5 9.5 0 0 1 0 14.12l-1.04-1.08a8 8 0 0 0 0-11.96l1.04-1.08Z" fill="currentColor"/></svg>
+          </button>
+          <div id="volumePopover" class="volumePopover">
+            <input id="volume" type="range" min="0" max="100" value="100" aria-label="音量" />
+            <div id="volumeValue">100%</div>
           </div>
         </div>
+        <button id="dockMenuBtn" class="iconBtn" type="button" aria-label="打开队列面板">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.25h16v1.5H4v-1.5Zm0 5h16v1.5H4v-1.5Zm0 5h10v1.5H4v-1.5Z" fill="currentColor"/></svg>
+        </button>
       </div>
-      <audio id="audio" preload="metadata"></audio>
     </footer>
-  </div>
 
-  <div id="downloadMenu" class="downloadMenu hidden" aria-hidden="true">
-    <div class="downloadMenuBackdrop"></div>
-    <div id="downloadMenuCard" class="downloadMenuCard" role="menu" aria-label="选择下载音质"></div>
-  </div>
+    <div id="downloadMenu" class="downloadMenu hidden" aria-hidden="true">
+      <div class="modalScrim"></div>
+      <div id="downloadMenuCard" class="downloadMenuCard"></div>
+    </div>
 
-  <div id="downloadModal" class="downloadModal hidden" aria-hidden="true">
-    <div class="downloadModalBackdrop"></div>
-    <div class="downloadModalCard">
-      <div class="downloadModalHeader">
-        <div class="downloadModalTitle">下载</div>
-        <div id="downloadModalTrackName" class="downloadModalTrackName"></div>
-      </div>
-      <div class="downloadModalQualityRow">
-        <div class="downloadModalSectionLabel">音质</div>
-        <div id="downloadModalQualityBtns" class="downloadModalQualityBtns"></div>
-      </div>
-      <div class="downloadModalPathRow">
-        <div class="downloadModalSectionLabel">保存路径</div>
-        <div class="downloadModalPathInput">
-          <input id="downloadModalPathText" type="text" placeholder="选择下载目录…" spellcheck="false" />
-          <button id="downloadModalBrowseBtn" type="button" class="btn small">浏览</button>
+    <div id="downloadModal" class="modal hidden" aria-hidden="true">
+      <div class="modalScrim"></div>
+      <div class="modalCard downloadModalCard">
+        <div class="modalHead">
+          <div class="modalTitle">下载歌曲</div>
+          <div id="downloadModalTrackName" class="modalSubTitle"></div>
+        </div>
+        <div class="modalSection">
+          <div class="modalLabel">下载音质</div>
+          <div id="downloadModalQualityBtns" class="quality-btn-row"></div>
+        </div>
+        <div class="modalSection">
+          <div class="modalLabel">下载位置</div>
+          <div class="path-row">
+            <input id="downloadModalPathText" type="text" placeholder="选择下载目录" />
+            <button id="downloadModalBrowseBtn" class="btn" type="button">浏览</button>
+          </div>
+        </div>
+        <div class="modalGrid">
+          <label class="checkRow"><input id="downloadModalSetDefault" type="checkbox" /> 设为默认路径</label>
+          <label class="checkRow"><input id="downloadModalEmbedCover" type="checkbox" checked /> 嵌入封面</label>
+        </div>
+        <div class="modalSection">
+          <div class="modalLabel">并发下载数</div>
+          <input id="downloadModalWorkers" type="number" min="1" step="1" value="4" />
+        </div>
+        <div class="modalActions">
+          <button id="downloadModalCancelBtn" class="btn" type="button">取消</button>
+          <button id="downloadModalConfirmBtn" class="btn primary" type="button">开始下载</button>
         </div>
       </div>
-      <label class="downloadModalCheckboxRow">
-        <input id="downloadModalSetDefault" type="checkbox" />
-        <span>设为默认下载路径</span>
-      </label>
-      <div class="downloadModalPathRow">
-        <div class="downloadModalSectionLabel">并发数</div>
-        <input id="downloadModalWorkers" type="number" min="1" step="1" value="4" placeholder="下载并发数" />
-      </div>
+    </div>
 
-      <div class="downloadModalActions">
-        <button id="downloadModalConfirmBtn" type="button" class="btn small primary">下载</button>
-        <button id="downloadModalCancelBtn" type="button" class="btn small">取消</button>
+    <div id="browseDirModal" class="modal hidden" aria-hidden="true">
+      <div class="modalScrim"></div>
+      <div class="modalCard browseDirCard">
+        <div class="modalHead">
+          <div class="modalTitle">选择目录</div>
+          <div id="browseDirCurrentPath" class="modalSubTitle"></div>
+        </div>
+        <div id="browseDirList" class="browseDirList"></div>
+        <div class="modalActions">
+          <button id="browseDirCancelBtn" class="btn" type="button">取消</button>
+          <button id="browseDirConfirmBtn" class="btn primary" type="button">选择此目录</button>
+        </div>
       </div>
     </div>
+
+    <button id="mobileSettingsBtn" type="button" aria-hidden="true"></button>
+    <div id="mobileSettingsBackdrop"></div>
+    <button id="mobileSidebarToggle" type="button" aria-hidden="true"></button>
+    <button id="mobileSidebarClose" type="button" aria-hidden="true"></button>
+    <div id="mobileSidebarOverlay"></div>
+    <button id="mobileTabQueue" type="button" aria-hidden="true"></button>
+    <button id="mobileTabPlaylists" type="button" aria-hidden="true"></button>
+
+    <span id="appVersion" style="display:none"></span>
+    <span id="appVersionMobile" style="display:none"></span>
+    <button id="backTop" style="display:none">↑</button>
+    <audio id="audio"></audio>
   </div>
 
-  <div id="browseDirModal" class="downloadModal hidden" aria-hidden="true">
-    <div class="browseDirBackdrop"></div>
-    <div class="browseDirCard">
-      <div class="browseDirHeader">
-        <div class="downloadModalSectionLabel">选择目录</div>
-        <div id="browseDirCurrentPath" class="browseDirCurrentPath"></div>
-      </div>
-      <div id="browseDirList" class="browseDirList"></div>
-      <div class="browseDirActions">
-        <button id="browseDirConfirmBtn" type="button" class="btn small primary">选择此目录</button>
-        <button id="browseDirCancelBtn" type="button" class="btn small">取消</button>
-      </div>
-    </div>
-  </div>
+  <script src="/app/core.js?v=2.12.0"></script>
+  <script src="/app/accounts.js?v=2.12.0"></script>
+  <script src="/app/queue.js?v=2.12.0"></script>
+  <script src="/app/playlists.js?v=2.12.0"></script>
+  <script src="/app/api.js?v=2.12.0"></script>
+  <script src="/app/discover.js?v=2.12.0"></script>
+  <script src="/app/player.js?v=2.12.0"></script>
+  <script src="/app/app.js?v=2.12.0"></script>
 
-  <div id="mobileSettingsBackdrop" class="mobileSettingsBackdrop" aria-hidden="true"></div>
+  <script>
+  document.addEventListener('DOMContentLoaded', function(){
+    var sidebar = document.getElementById('sidebar');
+    var navQueue = document.getElementById('navQueue');
+    var navPlaylists = document.getElementById('navPlaylists');
+    var navDiscover = document.getElementById('navDiscover');
+    var dockMenuBtn = document.getElementById('dockMenuBtn');
+    var avatarBtn = document.getElementById('avatarBtn');
+    var avatarDropdown = document.getElementById('avatarDropdown');
+    var navSearch = document.getElementById('navSearch');
+    var q = document.getElementById('q');
+    var volumePopover = document.getElementById('volumePopover');
+    var volumeToggle = document.querySelector('[data-volume-toggle]');
 
-  <script src="/app/core.js?v=1.7.2"></script>
-  <script src="/app/accounts.js?v=1.7.2"></script>
-  <script src="/app/queue.js?v=1.7.2"></script>
-  <script src="/app/playlists.js?v=1.7.2"></script>
-  <script src="/app/api.js?v=1.7.2"></script>
-  <script src="/app/discover.js?v=1.7.2"></script>
-  <script src="/app/player.js?v=1.7.2"></script>
-  <script src="/app/app.js?v=1.7.2"></script>
+    function toggleSidebar() {
+      if (sidebar) sidebar.classList.toggle('open');
+    }
+    if (navQueue) navQueue.addEventListener('click', toggleSidebar);
+    if (navPlaylists) navPlaylists.addEventListener('click', toggleSidebar);
+    if (dockMenuBtn) dockMenuBtn.addEventListener('click', toggleSidebar);
+
+    if (navDiscover) navDiscover.addEventListener('click', function(){
+      if (typeof loadDiscoverRandom === 'function') loadDiscoverRandom(true);
+      var title = document.getElementById('contentTitle');
+      if (title) title.textContent = '发现';
+    });
+
+    if (navSearch) navSearch.addEventListener('click', function(){
+      var title = document.getElementById('contentTitle');
+      if (title) title.textContent = '搜索结果';
+      if (q) { q.focus(); q.select(); }
+    });
+
+    if (avatarBtn) avatarBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (avatarDropdown) avatarDropdown.style.display = avatarDropdown.style.display === 'none' ? 'block' : 'none';
+    });
+
+    if (volumeToggle) volumeToggle.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (typeof toggleVolumePopover === 'function') {
+        toggleVolumePopover();
+      } else if (volumePopover) {
+        volumePopover.classList.toggle('open');
+      }
+    });
+
+    document.addEventListener('click', function(){
+      if (avatarDropdown) avatarDropdown.style.display = 'none';
+      if (volumePopover) volumePopover.classList.remove('open');
+    });
+  });
+  </script>
 </body>
 </html>

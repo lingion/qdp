@@ -743,8 +743,12 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
 
         # new local app
         if path in {"/", ""}:
+            qs = urllib.parse.parse_qs(parsed.query or "")
+            redirect_url = "/app/"
+            if parsed.query:
+                redirect_url += "?" + parsed.query
             self.send_response(HTTPStatus.FOUND)
-            self.send_header("Location", "/app/")
+            self.send_header("Location", redirect_url)
             self.end_headers()
             return
 
@@ -793,11 +797,91 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         })
 
     def _handle_meta(self):
+        proxy_host = get_active_proxy() or ""
+        # Keep external proxy for images (qdp.qzz.io handles CORS/referrer)
+        # Also provide local image-proxy as fallback
+        external_proxy = (proxy_host + "/proxy?url=") if proxy_host else ""
+        local_proxy = "/api/image-proxy?url="
         self._send_api_success({
             "version": WEB_PLAYER_VERSION,
             "web_player_version": WEB_PLAYER_VERSION,
             "server_version": self.server_version,
+            "image_proxy_base": external_proxy or local_proxy,
+            "image_proxy_fallback": local_proxy,
         })
+
+    def _handle_image_proxy(self, parsed: urllib.parse.ParseResult):
+        """Proxy qobuz cover images through local server to avoid CORS/referrer issues.
+        Uses the qdp reverse proxy (URL-prefix style, same as API calls)."""
+        qs = urllib.parse.parse_qs(parsed.query or "")
+        target_url = (qs.get("url") or [""])[0]
+        if not target_url:
+            self._send_api_error(400, "missing_url", "Missing url parameter")
+            return
+        # Only allow qobuz image domains
+        if "qobuz.com" not in target_url and "qobuzcdn" not in target_url:
+            self._send_api_error(403, "forbidden_domain", "Only qobuz images allowed")
+            return
+        try:
+            # Strategy 1: Use qdp reverse-proxy as URL prefix (same pattern as API calls)
+            proxy_host = get_active_proxy()
+            resp = None
+            if proxy_host:
+                # Try the /proxy?url= pattern first
+                for ph in [proxy_host]:
+                    try:
+                        fetch_url = ph.rstrip('/') + '/proxy?url=' + urllib.parse.quote(target_url, safe='')
+                        r = requests.get(fetch_url, timeout=8, headers={
+                            "User-Agent": _get_user_agent(),
+                            "Referer": "https://play.qobuz.com/",
+                        })
+                        if r.status_code == 200 and len(r.content) > 100:
+                            resp = r
+                            break
+                    except requests.exceptions.RequestException:
+                        continue
+                # Strategy 2: host substitution (static.qobuz.com -> proxy_host)
+                if resp is None and 'static.qobuz.com' in target_url:
+                    try:
+                        fetch_url2 = target_url.replace('https://static.qobuz.com', proxy_host.rstrip('/'))
+                        r2 = requests.get(fetch_url2, timeout=8, headers={
+                            "User-Agent": _get_user_agent(),
+                            "Referer": "https://play.qobuz.com/",
+                        })
+                        if r2.status_code == 200:
+                            resp = r2
+                    except requests.exceptions.RequestException:
+                        pass
+            # Strategy 3: direct
+            if resp is None:
+                resp = requests.get(target_url, timeout=10, headers={
+                    "User-Agent": _get_user_agent(),
+                    "Referer": "https://play.qobuz.com/",
+                })
+            if resp.status_code != 200:
+                # Fallback: try direct fetch
+                resp2 = requests.get(target_url, timeout=15, headers={
+                    "User-Agent": _get_user_agent(),
+                    "Referer": "https://play.qobuz.com/",
+                })
+                if resp2.status_code != 200:
+                    self._send_api_error(resp2.status_code, "image_fetch_failed", f"Upstream returned {resp.status_code}")
+                    return
+                resp = resp2
+            content_type = resp.headers.get("Content-Type", "image/jpeg")
+            data = resp.content
+            self._trace("GET", "/api/image-proxy", status=200, note=f"image:{len(data)}B")
+            self.send_response(HTTPStatus.OK)
+            self._send_cors_headers()
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
+        except requests.exceptions.RequestException as exc:
+            self._send_api_error(502, "image_proxy_failed", str(exc)[:200])
+        except Exception as exc:
+            self._send_api_error(500, "image_proxy_error", str(exc)[:200])
 
     def _handle_trace(self):
         if not self._debug_endpoint_allowed():
@@ -1282,6 +1366,39 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                 self._send_api_error(400, "unsupported_url", "unsupported url")
                 return
             self._send_api_success({"type": kind, "id": entity_id})
+            return
+
+        if path == "/api/image-proxy":
+            self._handle_image_proxy(parsed)
+            return
+
+        if path == "/api/cache-stats":
+            try:
+                import shutil
+                audio_cache = os.path.join(os.path.dirname(__file__), "..", "cache")
+                audio_size = 0
+                if os.path.isdir(audio_cache):
+                    for dirpath, _, filenames in os.walk(audio_cache):
+                        for f in filenames:
+                            fp = os.path.join(dirpath, f)
+                            try:
+                                audio_size += os.path.getsize(fp)
+                            except OSError:
+                                pass
+                total_size = audio_size
+                self._send_api_success({
+                    "audio": {"size_bytes": audio_size, "count": 0},
+                    "total": {"size_bytes": total_size, "count": 0}
+                })
+            except Exception as e:
+                self._send_api_success({"audio": {"size_bytes": 0}, "total": {"size_bytes": 0}})
+            return
+
+        if path == "/api/download-settings":
+            self._send_api_success({
+                "default_path": os.path.expanduser("~/Music/qdp"),
+                "workers": 3
+            })
             return
 
         self._send_api_error(404, "not_found", "not found")

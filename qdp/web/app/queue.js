@@ -212,7 +212,7 @@ function renderQueue(){
     row.setAttribute('role', 'listitem');
     row.innerHTML = `
       <div class="queueDragHandle" aria-hidden="true"><span class="queueGrip"></span></div>
-      <img class="queueThumb" src="${esc(t.image)}" alt="" />
+      <img class="queueThumb" src="${esc(rewriteImg(t.image))}" alt="" />
       <div class="queueMeta">
         <div class="queueTitle"></div>
         <div class="queueSub"></div>
@@ -252,6 +252,7 @@ function renderQueue(){
       actions.appendChild(removeBtn);
     }
     bindQueueDragHandlers(row, i);
+    paintIcons(row);
     root.appendChild(row);
   });
   updateQueueInfo();

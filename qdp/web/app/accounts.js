@@ -82,8 +82,11 @@ async function loadMe(){
     const label = me?.subscription?.label || me?.label || '';
     const name = me?.user?.display_name || me?.user?.login || 'Logged';
     const active = me?.active_account ? ` · ${me.active_account}` : '';
-    $('me').textContent = label ? `${name}${active} · ${label}` : `${name}${active}`;
+    // Avatar circle: show just the first letter
+    const avatarText = (name || '?').charAt(0).toUpperCase();
+    $('me').textContent = avatarText;
+    $('me').title = label ? `${name}${active} · ${label}` : `${name}${active}`;
   }catch(_e){
-    $('me').textContent = 'Not ready';
+    $('me').textContent = '?';
   }
 }
