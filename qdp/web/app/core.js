@@ -1032,12 +1032,25 @@ async function clearCacheByType(type){
   const btnAudio = $('clearCacheAudio');
   const btnAll = $('clearCacheAll');
   const buttons = [btnAudio, btnAll];
-  buttons.forEach((b)=>{ if(b) b.disabled = true; });
   const clickedBtn = type === 'all' ? btnAll : btnAudio;
   const origText = clickedBtn?.textContent || '';
-  if(clickedBtn) clickedBtn.textContent = '…';
   try{
-    // Clear frontend caches for 'all'
+    const stats = await api('/api/cache-stats');
+    const audioBytes = Number(stats?.audio?.size_bytes || 0);
+    const totalBytes = Number(stats?.total?.size_bytes || 0);
+    const targetBytes = type === 'all' ? totalBytes : audioBytes;
+    const label = type === 'all' ? '全部缓存' : '音频缓存';
+    const confirmed = await showConfirmModal(
+      `清除${label}`,
+      `将删除 ${formatBytes(targetBytes)}。确定继续吗？`,
+      '删除',
+      '取消',
+      { danger: true }
+    );
+    if(!confirmed) return;
+    buttons.forEach((b)=>{ if(b) b.disabled = true; });
+    if(clickedBtn) clickedBtn.textContent = '…';
+
     if(type === 'all'){
       state.artistCache = {};
       state.albumCache = {};
