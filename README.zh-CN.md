@@ -191,6 +191,7 @@ python -m PyInstaller --clean --noconfirm qdp.spec
 - 部署地址：https://b2ab7e62.qdp-webapp-demo.pages.dev
 - 最新 UI：v2.13.0（可刷新路由、手机搜索类型按钮、搜索历史、artist 页多端布局修复）
 - 最后更新：2026-06-15
+- 演示模式：**Pages 上的静态 mock 演示**（用于展示 UI/交互，不连接真实 qdp Python 运行时）
 
 ### 网页应用预览
 
