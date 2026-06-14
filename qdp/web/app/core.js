@@ -586,6 +586,13 @@ function persistVolumeState(){
 function setAudioEventGate(kind = ''){
   state.audioEventGate = String(kind || '');
 }
+function consumeAudioEventGate(kind = ''){
+  const expected = String(kind || '');
+  if(!expected) return false;
+  if(String(state.audioEventGate || '') !== expected) return false;
+  state.audioEventGate = '';
+  return true;
+}
 function nextAsyncRequestVersion(scope = 'default'){
   const key = String(scope || 'default');
   const current = Number(state.asyncRequestVersions[key] || 0) + 1;
