@@ -60,6 +60,8 @@ _ENTITY_CACHE_LOCK = threading.Lock()
 _ENTITY_CACHE: Dict[tuple, dict] = {}
 _ENTITY_CACHE_TTL = 1800
 _ENTITY_CACHE_MAX = 1024
+_AUDIO_CACHE_INFLIGHT_LOCK = threading.Lock()
+_AUDIO_CACHE_INFLIGHT = set()
 _MAX_STREAM_BYTES = 800 * 1024 * 1024  # 800 MB hard cap per stream
 _DISCOVER_RANDOM_SEEDS = ["jazz", "classical", "pop", "new", "electronic", "soundtrack"]
 
@@ -601,6 +603,66 @@ def _audio_cache_file(track_id: str, fmt: int, upstream_url: str = "") -> str:
     return os.path.join(_AUDIO_CACHE_ROOT, filename)
 
 
+def _find_audio_cache_candidate(track_id: str, fmt: int, allow_partial: bool = True, min_partial_bytes: int = 128 * 1024):
+    prefix = f"{re.sub(r'[^A-Za-z0-9._-]+', '_', str(track_id))[:120]}_{int(fmt)}"
+    if not os.path.isdir(_AUDIO_CACHE_ROOT):
+        return None, False
+    partial_candidate = None
+    for name in os.listdir(_AUDIO_CACHE_ROOT):
+        if not name.startswith(prefix):
+            continue
+        fp = os.path.join(_AUDIO_CACHE_ROOT, name)
+        if not os.path.isfile(fp):
+            continue
+        if not name.endswith('.part'):
+            return fp, False
+        partial_candidate = fp
+    if allow_partial and partial_candidate:
+        try:
+            if os.path.getsize(partial_candidate) >= int(min_partial_bytes):
+                return partial_candidate, True
+        except OSError:
+            return None, False
+    return None, False
+
+
+def _prime_audio_cache(track_id: str, fmt: int, upstream_url: str) -> None:
+    cache_file = _audio_cache_file(track_id, fmt, upstream_url)
+    if not track_id or not upstream_url or os.path.isfile(cache_file):
+        return
+    with _AUDIO_CACHE_INFLIGHT_LOCK:
+        if cache_file in _AUDIO_CACHE_INFLIGHT:
+            return
+        _AUDIO_CACHE_INFLIGHT.add(cache_file)
+
+    def _worker() -> None:
+        cache_tmp = cache_file + '.part'
+        try:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            r = requests.get(upstream_url, headers={"User-Agent": _get_user_agent()}, stream=True, timeout=60)
+            r.raise_for_status()
+            total = 0
+            with open(cache_tmp, 'wb') as fp:
+                for chunk in r.iter_content(chunk_size=1024 * 64):
+                    if not chunk:
+                        continue
+                    fp.write(chunk)
+                    total += len(chunk)
+                    if total > _MAX_STREAM_BYTES:
+                        raise OSError("stream exceeded cache limit")
+            os.replace(cache_tmp, cache_file)
+            logger.info("Primed audio cache for track %s fmt %s -> %s", track_id, fmt, cache_file)
+        except Exception as exc:
+            logger.warning("Failed to prime audio cache for track %s fmt %s: %s", track_id, fmt, exc)
+            with contextlib.suppress(OSError):
+                os.remove(cache_tmp)
+        finally:
+            with _AUDIO_CACHE_INFLIGHT_LOCK:
+                _AUDIO_CACHE_INFLIGHT.discard(cache_file)
+
+    threading.Thread(target=_worker, name=f"qdp-cache-{track_id}", daemon=True).start()
+
+
 def _client_cache_key(defaults: Optional[dict] = None) -> str:
     defaults = defaults or _get_runtime_defaults()
     active_account = get_active_account(CONFIG_FILE) or "default"
@@ -748,6 +810,43 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         _REQUEST_TRACE.append(item)
         if len(_REQUEST_TRACE) > _TRACE_LIMIT:
             del _REQUEST_TRACE[: max(0, len(_REQUEST_TRACE) - _TRACE_LIMIT)]
+
+    def do_HEAD(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        qs = urllib.parse.parse_qs(parsed.query or "")
+        self._trace("HEAD", path)
+
+        if path == "/api/cached-track":
+            tid = (qs.get("id") or [""])[0]
+            try:
+                fmt = self._parse_int_query(qs, "fmt", 5, minimum=5)
+            except ValueError as exc:
+                self._send_api_error(400, "invalid_query", str(exc))
+                return
+            if not tid:
+                self._send_api_error(400, "missing_id", "missing track id")
+                return
+            fp, is_partial = _find_audio_cache_candidate(tid, fmt, allow_partial=True)
+            if fp:
+                self.send_response(HTTPStatus.OK)
+                self._send_cors_headers()
+                self.send_header("Content-Type", _guess_content_type(fp[:-5] if fp.endswith('.part') else fp))
+                with contextlib.suppress(OSError):
+                    self.send_header("Content-Length", str(os.path.getsize(fp)))
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("X-QDP-Partial-Cache", "1" if is_partial else "0")
+                self.end_headers()
+                return
+            self._send_api_error(404, "cache_miss", "cached track not found")
+            return
+
+        if path.startswith("/app") or path.startswith("/static") or path == "/":
+            self.do_GET()
+            return
+
+        self.send_error(HTTPStatus.METHOD_NOT_ALLOWED, "HEAD not allowed")
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -1364,6 +1463,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                 return
             prox = "/stream?url=" + urllib.parse.quote(raw_url, safe="") + "&track_id=" + urllib.parse.quote(str(tid), safe="") + "&fmt=" + urllib.parse.quote(str(fmt), safe="")
             cached = f"/api/cached-track?id={urllib.parse.quote(str(tid), safe='')}&fmt={fmt}"
+            _prime_audio_cache(str(tid), fmt, raw_url)
             self._send_api_success({"url": prox, "cached_url": cached, "download_url": f"/api/download?id={urllib.parse.quote(str(tid), safe='')}&fmt={fmt}"})
             return
 
@@ -1439,26 +1539,23 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             if not tid:
                 self._send_api_error(400, "missing_id", "missing track id")
                 return
-            prefix = f"{re.sub(r'[^A-Za-z0-9._-]+', '_', str(tid))[:120]}_{int(fmt)}"
-            if os.path.isdir(_AUDIO_CACHE_ROOT):
-                for name in os.listdir(_AUDIO_CACHE_ROOT):
-                    if name.startswith(prefix):
-                        fp = os.path.join(_AUDIO_CACHE_ROOT, name)
-                        if os.path.isfile(fp):
-                            try:
-                                with open(fp, "rb") as f:
-                                    body = f.read()
-                                self.send_response(HTTPStatus.OK)
-                                self._send_cors_headers()
-                                self.send_header("Content-Type", _guess_content_type(fp))
-                                self.send_header("Content-Length", str(len(body)))
-                                self.send_header("Accept-Ranges", "bytes")
-                                self.send_header("Cache-Control", "public, max-age=86400")
-                                self.end_headers()
-                                self.wfile.write(body)
-                                return
-                            except OSError:
-                                break
+            fp, is_partial = _find_audio_cache_candidate(tid, fmt, allow_partial=True)
+            if fp:
+                try:
+                    with open(fp, "rb") as f:
+                        body = f.read()
+                    self.send_response(HTTPStatus.OK)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", _guess_content_type(fp[:-5] if fp.endswith('.part') else fp))
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.send_header("X-QDP-Partial-Cache", "1" if is_partial else "0")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                except OSError:
+                    pass
             self._send_api_error(404, "cache_miss", "cached track not found")
             return
 
