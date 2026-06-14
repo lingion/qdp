@@ -4,6 +4,37 @@
 
 const $ = (id) => document.getElementById(id);
 
+// ═══ Image Proxy ═══
+// static.qobuz.com images may be blocked. Rewrite to go through the qdp proxy.
+// Proxy base is fetched from server /api/meta at startup.
+let _imageProxyBase = '';
+async function _initImageProxy() {
+  try {
+    const data = await (await fetch('/api/meta')).json();
+    _imageProxyBase = (data?.data?.image_proxy_base) || '';
+  } catch(_) {}
+}
+_initImageProxy();
+
+function rewriteImg(url) {
+  if (typeof url !== 'string' || !url) return '/app/placeholder.svg';
+  if (_imageProxyBase && url.startsWith('http') && (url.includes('qobuz.com/') || url.includes('qobuzcdn')) && !url.includes('/image-proxy?') && !url.includes('/proxy?')) {
+    return _imageProxyBase + encodeURIComponent(url);
+  }
+  return url;
+}
+
+// On image load error, fall back to local proxy
+function initImageFallback() {
+  document.addEventListener('error', function(e) {
+    var el = e.target;
+    if (el && el.tagName === 'IMG' && el.src && el.src.includes('qobuz.com/') && !el.src.includes('/api/image-proxy?') && !el.dataset.fallback) {
+      el.dataset.fallback = '1';
+      el.src = '/api/image-proxy?url=' + encodeURIComponent(el.src);
+    }
+  }, true);
+}
+
 // ═══ Toast Notifications ═══
 
 function showToast(message, type, duration) {
@@ -332,6 +363,36 @@ const PLAYER_SESSION_KEY = 'qdp.web.player-session.v1';
 const REPEAT_KEY = 'qdp.web.repeat.v1';
 const REPEAT_MODES = ['off', 'all', 'one'];
 const ICONS = { play: 'play', pause: 'pause', volume: 'volume', mute: 'mute', repeat: 'repeat', repeatOne: 'repeatOne' };
+
+// SVG paths for icons
+const ICON_SVGS = {
+  play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72c0 .78.87 1.26 1.54.84l10.79-6.86c.62-.39.62-1.29 0-1.68L9.54 4.3C8.87 3.88 8 4.36 8 5.14Z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" fill="currentColor"/></svg>',
+  download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1zM5 19a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z" fill="currentColor"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z" fill="currentColor"/></svg>',
+  close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/></svg>',
+  volume: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12z" fill="currentColor"/></svg>',
+  mute: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm18.3-1.3l-1.4-1.4L17 9.2 14.1 6.3l-1.4 1.4L15.6 10.6 12.7 13.5l1.4 1.4L17 12l2.9 2.9 1.4-1.4L18.2 10.6l2.1-2.1z" fill="currentColor"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" fill="currentColor"/></svg>',
+  repeatOne: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" fill="currentColor"/><text x="12" y="15" text-anchor="middle" font-size="8" fill="currentColor" font-weight="bold">1</text></svg>',
+};
+
+function renderIconSpan(el, iconName){
+  if(!el) return;
+  const svg = ICON_SVGS[iconName];
+  if(svg) el.innerHTML = svg;
+  else el.dataset.icon = iconName;
+}
+
+// Scan DOM for [data-icon] spans and render SVGs
+function paintIcons(root){
+  (root || document).querySelectorAll('[data-icon]').forEach((el)=>{
+    const name = el.dataset.icon;
+    if(name && ICON_SVGS[name]){
+      el.innerHTML = ICON_SVGS[name];
+    }
+  });
+}
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const STREAM_STALE_MS = 1000 * 60 * 30;   // stream URLs expire ~1h; refresh after 30min
 const STREAM_PREFETCH_MAX_AGE_MS = STREAM_STALE_MS;  // align with staleness threshold to avoid stale-cache gap
@@ -575,7 +636,7 @@ function syncVolumeUi(){
   const percent = Math.round(persistedVolume() * 100);
   if(slider) slider.value = String(percent);
   if(pill) pill.textContent = `${percent}%`;
-  if(icon) icon.dataset.icon = state.muted || percent === 0 ? ICONS.mute : ICONS.volume;
+  if(icon) renderIconSpan(icon, state.muted || percent === 0 ? ICONS.mute : ICONS.volume);
   if(muteBtn) muteBtn.classList.toggle('active', state.muted || percent === 0 || state.volumePopoverOpen);
   if(muteToggle){
     muteToggle.textContent = state.muted || percent === 0 ? '取消静音' : '静音';
@@ -647,7 +708,6 @@ function setVolumePopoverOpen(open){
   state.volumePopoverOpen = !!open;
   const popover = $('volumePopover');
   if(popover){
-    popover.classList.toggle('hidden', !state.volumePopoverOpen);
     popover.classList.toggle('open', state.volumePopoverOpen);
     popover.setAttribute('aria-hidden', String(!state.volumePopoverOpen));
   }
@@ -978,8 +1038,13 @@ function normTrack(it){
 function setPlayIcon(kind){
   const btn = $('play');
   if(!btn) return;
-  const icon = btn.querySelector('.icon');
-  if(icon) icon.dataset.icon = kind;
+  const svg = ICON_SVGS[kind];
+  if(svg){
+    btn.innerHTML = svg;
+  } else {
+    const icon = btn.querySelector('.icon');
+    if(icon) icon.dataset.icon = kind;
+  }
 }
 function setActiveTab(type){
   state.type = type;
@@ -991,6 +1056,9 @@ function setView(renderer){
   if(!root) return;
   root.innerHTML = '';
   renderer(root);
+  // Switch grid to single-column for detail/tracklist views
+  const hasDetail = root.querySelector('.detail, .skeleton-detail');
+  root.style.gridTemplateColumns = hasDetail ? '1fr' : '';
   const backBtn = $('backTop');
   if(backBtn) backBtn.classList.toggle('hidden', state.history.length === 0);
 }
@@ -1018,7 +1086,7 @@ function card(img, title, subtitle, onClick, actions = [], options = {}){
   const hiRes = options.hiRes ?? isHiResSource(options.audioSpecSource || options.entity || options.track || null);
   el.className = `card${hiRes ? ' hiResCard' : ''}`;
   el.innerHTML = `
-    <img class="cardCover" src="${esc(img)}" alt="" />
+    <img class="cardCover" src="${esc(rewriteImg(img))}" alt="" />
     <div class="k cardBody">
       <div class="cardMain">
         <div class="titleStack">
@@ -1109,6 +1177,7 @@ function makeIconButton(iconName, onClick, title=''){
   b.title = title;
   if(title) b.setAttribute('aria-label', title);
   b.innerHTML = `<span class="icon" data-icon="${iconName}"></span>`;
+  paintIcons(b);
   b.addEventListener('click', (e)=>{ e.stopPropagation(); try{ const r = onClick(e); if(r && r.catch) r.catch((err)=>console.error('[action-btn]', err)); }catch(err){ console.error('[action-btn]', err); } });
   return b;
 }
@@ -1119,6 +1188,7 @@ function makeIconLink(href, title='Download'){
   a.title = title;
   a.download = '';
   a.innerHTML = '<span class="icon" data-icon="download"></span>';
+  paintIcons(a);
   a.addEventListener('click', (e)=>e.stopPropagation());
   return a;
 }
@@ -1595,6 +1665,7 @@ function makeAlbumDownloadLink(album, title='Download album'){
   btn.className = 'btn small iconBtn';
   btn.title = title;
   btn.innerHTML = '<span class="icon" data-icon="download"></span>';
+  paintIcons(btn);
   btn.addEventListener('click', async (e)=>{
     e.stopPropagation();
     const albumId = album?.albumId || album?.id;
@@ -1621,6 +1692,7 @@ function makeTrackDownloadLink(track, title='Download'){
   btn.className = 'btn small iconBtn';
   btn.title = title;
   btn.innerHTML = '<span class="icon" data-icon="download"></span>';
+  paintIcons(btn);
   btn.addEventListener('click', (e)=>{
     e.stopPropagation();
     openDownloadModal(track, btn);
@@ -1753,9 +1825,9 @@ function renderTrackBulkBar(container, viewKey, tracks, onChange){
     <label class="bulkSelectAll checkWrap"><input type="checkbox" class="bulkToggleAll checkInput" /> <span class="checkMark" aria-hidden="true"></span><span>全选</span></label>
     <div class="bulkSummary">已选 <strong class="bulkCount">0</strong> 首</div>
     <div class="bulkActions">
-      <button type="button" class="btn small bulkDownloadBtn">批量下载</button>
-      <button type="button" class="btn small bulkAddBtn">批量加入 Playlist</button>
-      <button type="button" class="btn small bulkClearBtn">清空选择</button>
+      <button type="button" class="btn primary bulkDownloadBtn" title="批量下载所选曲目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1zM5 19a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z" fill="currentColor"/></svg>下载</button>
+      <button type="button" class="btn bulkAddBtn" title="批量加入歌单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z" fill="currentColor"/></svg>加入歌单</button>
+      <button type="button" class="bulkClearBtn" title="清空已选">清空</button>
     </div>
   `;
   const countNode = bar.querySelector('.bulkCount');
@@ -1766,6 +1838,10 @@ function renderTrackBulkBar(container, viewKey, tracks, onChange){
     allBox.checked = !!tracks.length && items.length === tracks.length;
     allBox.indeterminate = items.length > 0 && items.length < tracks.length;
     bar.classList.toggle('hasSelection', items.length > 0);
+    const downloadBtn = bar.querySelector('.bulkDownloadBtn');
+    const addBtn = bar.querySelector('.bulkAddBtn');
+    if(downloadBtn) downloadBtn.disabled = items.length === 0;
+    if(addBtn) addBtn.disabled = items.length === 0;
     onChange?.(items);
   };
   allBox.addEventListener('change', ()=>{
@@ -1798,10 +1874,10 @@ function updateMediaSession(meta, audio){
   const t = normTrack(meta) || {};
   const artwork = [];
   if(t.image){
-    artwork.push({ src: t.image, sizes: '512x512', type: 'image/jpeg' });
+    artwork.push({ src: rewriteImg(t.image), sizes: '512x512', type: 'image/jpeg' });
   }
   if(t.album_image && t.album_image !== t.image){
-    artwork.push({ src: t.album_image, sizes: '512x512', type: 'image/jpeg' });
+    artwork.push({ src: rewriteImg(t.album_image), sizes: '512x512', type: 'image/jpeg' });
   }
   if(!artwork.length){
     artwork.push({ src: '', sizes: '512x512', type: 'image/jpeg' });

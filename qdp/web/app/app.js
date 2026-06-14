@@ -209,7 +209,17 @@ function bindUI(){
     goBtn.textContent = q ? '搜索' : '发现';
     goBtn.classList.toggle('primary', !!q);
   }
-  $('q').addEventListener('input', updateGoButton);
+  $('q').addEventListener('input', ()=>{
+    updateGoButton();
+    const clearBtn = $('searchClear');
+    if(clearBtn) clearBtn.style.display = ($('q').value || '').trim() ? 'inline-flex' : 'none';
+  });
+  $('searchClear')?.addEventListener('click', ()=>{
+    $('q').value = '';
+    $('q').focus();
+    $('searchClear').hidden = true;
+    updateGoButton();
+  });
   if(searchTypeTabs){
     searchTypeTabs.addEventListener('mousedown', (e)=>{ e.preventDefault(); });
   }
@@ -311,8 +321,10 @@ function bindUI(){
   $('repeat').addEventListener('click', toggleRepeatMode);
   $('repeatMain').addEventListener('click', toggleRepeatMode);
   $('clearQueue').addEventListener('click', ()=>clearQueue());
-  $('mute').addEventListener('click', (e)=>{ e.stopPropagation(); toggleVolumePopover(); });
-  $('volumeMuteToggle').addEventListener('click', (e)=>{ e.stopPropagation(); toggleMute(); });
+  const muteOld = $('mute');
+  if(muteOld) muteOld.addEventListener('click', (e)=>{ e.stopPropagation(); toggleVolumePopover(); });
+  const muteBtn = $('volumeMuteToggle');
+  if(muteBtn) muteBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleMute(); });
   $('volume').addEventListener('input', (e)=>setVolume(Number(e.target.value || 0) / 100));
   $('qualitySelect').value = String(currentQuality());
   $('qualitySelect').addEventListener('change', async ()=>{
@@ -533,6 +545,27 @@ async function main(){
   syncAppVersion();
   bindUI();
   bindPlayer();
+  initImageFallback();
+  paintIcons(document);
+
+  // Check for search query in URL params
+  const urlParams = new URLSearchParams(location.search);
+  const searchQ = urlParams.get('q');
+  const albumId = urlParams.get('album');
+  if(searchQ){
+    $('q').value = searchQ;
+    // Set clear button visibility directly
+    const clearBtn = $('searchClear');
+    if(clearBtn){
+      clearBtn.hidden = false;
+      clearBtn.style.display = 'inline-flex';
+    }
+    // Also dispatch a synthetic input event so any other input-driven UI (e.g., go button) stays in sync
+    $('q').dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if(albumId){
+    // will be triggered after init completes
+  }
   syncSidebarSections();
   handleViewportChange();
   $('go').textContent = '发现';
@@ -550,10 +583,69 @@ async function main(){
   // Pre-load default download path so bulk downloads don't land in cwd
   fetchDefaultDownloadPath().then((p)=>{ if(p) _downloadModalState.defaultPath = p; }).catch(()=>{});
   if(!state.queue.length && !($('q').value || '').trim()){
-    await loadDiscoverRandom();
+    // Check for deep-link hash before loading discover
+    const h = location.hash.slice(1);
+    const params = new URLSearchParams(location.search);
+    const deepId = params.get('album') || params.get('artist') || params.get('playlist');
+    const deepType = params.get('album') ? 'album' : (params.get('artist') ? 'artist' : (params.get('playlist') ? 'playlist' : ''));
+    if(deepId && deepType){
+      console.debug('[main] deep-link query param detected:', deepType, deepId);
+      setTimeout(()=>{
+        if(deepType === 'album') openAlbum(deepId);
+        else if(deepType === 'artist') openArtist(deepId);
+        else if(deepType === 'playlist') openPlaylist(deepId);
+      }, 200);
+    } else if(h.startsWith('/album/') || h.startsWith('/artist/') || h.startsWith('/playlist/')){
+      console.debug('[main] deep-link hash detected, skipping discover');
+      setTimeout(()=>{
+        const id = h.split('/')[2];
+        if(h.startsWith('/album/')) openAlbum(id);
+        else if(h.startsWith('/artist/')) openArtist(id);
+        else if(h.startsWith('/playlist/')) openPlaylist(id);
+      }, 200);
+    } else {
+      console.debug('[main] loading discover random...');
+      try{
+        const albums = await loadDiscoverRandom();
+        console.debug('[main] discover loaded', albums?.length, 'albums');
+        if(!albums?.length){
+          $('results').innerHTML = '<div class="empty">推荐专辑为空。搜索试试？</div>';
+        }
+      }catch(err){
+        console.error('[main] discover failed', err);
+        $('results').innerHTML = '<div class="empty">推荐加载失败：' + esc(err.message) + '</div>';
+      }
+    }
+  } else {
+    console.debug('[main] skipping discover, queue or search active');
+  }
+
+  // Handle deep-link search/album after all init is done
+  if(searchQ){
+    console.debug('[main] executing deep-link search:', searchQ);
+    try{ await search(); }catch(err){ console.error('[main] deep-link search failed', err); }
+  } else if(albumId){
+    console.debug('[main] executing deep-link album:', albumId);
+    try{ await openAlbum(albumId); }catch(err){ console.error('[main] deep-link album failed', err); }
   }
 }
 
 if(!window.__QDP_SKIP_BOOT__){
   main();
 }
+
+// ── Hash-based deep linking (manual nav) ──
+// Only trigger on actual hash changes, not on initial load
+window.addEventListener('hashchange', ()=>{
+  const h = location.hash.slice(1);
+  if(h.startsWith('/album/')){
+    const id = h.split('/')[2];
+    if(id) openAlbum(id);
+  } else if(h.startsWith('/artist/')){
+    const id = h.split('/')[2];
+    if(id) openArtist(id);
+  } else if(h.startsWith('/playlist/')){
+    const id = h.split('/')[2];
+    if(id) openPlaylist(id);
+  }
+});
