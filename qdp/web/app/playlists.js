@@ -120,7 +120,7 @@ function playlistCoverMarkup(pl){
     return `<div class="playlistThumb collage">${images.map((src)=>`<img src="${esc(src)}" alt="" />`).join('')}</div>`;
   }
   if(images.length === 1){
-    return `<img class="playlistThumb single" src="${esc(images[0])}" alt="" />`;
+    return `<img class="playlistThumb single" src="${esc(rewriteImg(images[0]))}" alt="" />`;
   }
   return '<div class="playlistThumb placeholder">♪</div>';
 }
@@ -265,7 +265,7 @@ function trackRow(track, i, tracks, options = {}){
   row.className = 'trackrow';
   row.innerHTML = `
     <label class="trackSelect checkWrap"><input type="checkbox" class="trackCheckbox checkInput" aria-label="选择 ${esc(t.title || 'track')}" /><span class="checkMark" aria-hidden="true"></span></label>
-    <img class="trackRowThumb" src="${esc(t.image || '')}" alt="" />
+    <img class="trackRowThumb" src="${esc(rewriteImg(t.image || ''))}" alt="" />
     <div class="n">${i+1}</div>
     <div class=\"trackTitleWrap\">
       <span class=\"tt\"></span>
@@ -308,7 +308,7 @@ function renderTrackList(title, subtitle, cover, tracks, options = {}){
     head.className = 'detail';
     head.innerHTML = `
       <div class="detailHead">
-        <img class="detailCover" src="${esc(cover || '')}" alt="" />
+        <img class="detailCover" src="${esc(rewriteImg(cover || ''))}" alt="" />
         <div class="detailMeta">
           <div class="detailMainRow">
             <div class="detailInfo">
