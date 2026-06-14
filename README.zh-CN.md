@@ -187,8 +187,8 @@ python -m PyInstaller --clean --noconfirm qdp.spec
 
 ## 网页应用演示
 
-- 在线演示：https://5553b322.qdp-webapp-demo.pages.dev
-- 部署地址：https://5553b322.qdp-webapp-demo.pages.dev
+- 在线演示：https://d740bb53.qdp-webapp-demo.pages.dev
+- 部署地址：https://d740bb53.qdp-webapp-demo.pages.dev
 - 最新 UI：v2.12.0（Apple Music 风格、搜索框清除 X 在圆角矩形内、单行批量下载条）
 - 最后更新：2026-06-14
 

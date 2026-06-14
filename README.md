@@ -185,8 +185,8 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 ## Webapp Demo
 
-- Live demo: https://5553b322.qdp-webapp-demo.pages.dev
-- Deployment URL: https://5553b322.qdp-webapp-demo.pages.dev
+- Live demo: https://d740bb53.qdp-webapp-demo.pages.dev
+- Deployment URL: https://d740bb53.qdp-webapp-demo.pages.dev
 - Latest UI: v2.12.0 (Apple Music style, search clear X inside shell, single-row bulk download bar)
 - Last refreshed: 2026-06-14
 
