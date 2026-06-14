@@ -648,6 +648,8 @@ function bindPlayer(){
     if(!audio.duration || !isFinite(audio.duration)) return;
     const v = Math.floor((audio.currentTime / audio.duration) * 1000);
     seek.value = String(v);
+    const _fill = document.getElementById('progressFill');
+    if(_fill) _fill.style.width = (audio.currentTime / audio.duration * 100) + '%';
     $('tcur').textContent = fmtTime(audio.currentTime);
     $('tdur').textContent = fmtTime(audio.duration);
     const now = Date.now();
@@ -662,6 +664,8 @@ function bindPlayer(){
     if(!audio.duration || !isFinite(audio.duration)) return;
     const v = Number(seek.value || 0) / 1000;
     audio.currentTime = v * audio.duration;
+    const _fill2 = document.getElementById('progressFill');
+    if(_fill2) _fill2.style.width = (v * 100) + '%';
   });
 
   audio.addEventListener('volumechange', ()=>{
