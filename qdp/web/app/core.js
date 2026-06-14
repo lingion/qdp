@@ -694,6 +694,9 @@ function syncSidebarSections(){
     }
     if(body) body.classList.toggle('collapsed', !expanded);
   });
+  // Mobile UI side-effects
+  if(typeof syncQueueBadge === 'function') syncQueueBadge();
+  if(typeof syncMobileTopbarTitle === 'function') syncMobileTopbarTitle();
 }
 function setSidebarSection(name, expanded){
   if(!(name in state.sidebarSections)) return;

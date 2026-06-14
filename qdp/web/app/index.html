@@ -77,6 +77,20 @@
       </div>
     </nav>
 
+    <header class="mobile-topbar" aria-label="移动端导航">
+      <button id="mobileMenuBtn" class="iconBtn mobileMenuBtn" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="mobileDrawer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h18v1.5H3v-1.5Zm0 5h18v1.5H3v-1.5Zm0 5h12v1.5H3v-1.5Z" fill="currentColor"/></svg>
+      </button>
+      <div class="mobile-topbar-title" id="mobileTopbarTitle">发现</div>
+      <button id="mobileQueueBtn" class="iconBtn mobileQueueBtn" type="button" aria-label="打开播放队列" aria-expanded="false" aria-controls="queueDrawer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.25h16v1.5H4v-1.5Zm0 5h16v1.5H4v-1.5Zm0 5h10v1.5H4v-1.5Z" fill="currentColor"/></svg>
+        <span class="queueCountBadge" id="queueCountBadge" hidden></span>
+      </button>
+    </header>
+
+    <div id="mobileDrawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+    <div id="queueDrawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+
     <main class="main-content">
       <div class="content-header">
         <h1 id="contentTitle">发现</h1>
@@ -91,7 +105,30 @@
       <div id="results" class="results"></div>
     </main>
 
-    <aside id="sidebar" class="queue-panel" aria-label="播放队列与歌单">
+    <aside id="mobileNavDrawer" class="mobile-drawer" data-drawer="main" aria-hidden="true" aria-label="主导航 (移动)">
+      <div class="mobile-drawer-header">
+        <span class="mobile-drawer-title">QDP</span>
+        <button class="iconBtn mobile-drawer-close" type="button" aria-label="关闭菜单">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+        </button>
+      </div>
+      <div class="mobile-drawer-body">
+        <div class="search-wrap">
+          <div class="search-shell">
+            <svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.42 1.06-1.06-4.42-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z" fill="currentColor"/></svg>
+            <input id="qMobile" type="search" placeholder="搜索" autocomplete="off" aria-label="搜索 (移动)" />
+          </div>
+        </div>
+        <nav class="mobile-nav-list" aria-label="内容导航 (移动)">
+          <a class="navItem active mobileNavItem" data-target="discover" href="javascript:void(0)"><span>发现</span></a>
+          <a class="navItem mobileNavItem" data-target="search" href="javascript:void(0)"><span>搜索结果</span></a>
+          <a class="navItem mobileNavItem" data-target="playlists" href="javascript:void(0)"><span>我的歌单</span></a>
+          <a class="navItem mobileNavItem" data-target="account" href="javascript:void(0)"><span>账户</span></a>
+        </nav>
+      </div>
+    </aside>
+
+    <aside id="sidebar" class="queue-panel" aria-label="播放队列与歌单" data-drawer="queue">
       <div class="sidePanelShell">
         <div class="sideCard sidePanel">
           <div class="sideHeader">
