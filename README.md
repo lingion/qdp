@@ -187,10 +187,19 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 - Live demo: https://3154c1b6.qdp-webapp-demo.pages.dev
 - Deployment URL: https://3154c1b6.qdp-webapp-demo.pages.dev
+- Latest UI: v2.12.0 (Apple Music style, search clear X inside shell, single-row bulk download bar)
+- Last refreshed: 2026-06-14
 
 ### Webapp Preview
 
+Search results with new transparent X inside the search shell:
+
 ![qdp webapp preview](docs/screenshots/webapp-home.jpg)
+
+Album detail with the new Apple Music style bulk download bar
+(`☐ 全选 · 已选 N 首 · [⬇ 下载] [+ 加入歌单] · 清空`, single row, capsule buttons, glass blur):
+
+![qdp webapp album detail](docs/screenshots/webapp-album.jpg)
 
 ### TUI Preview
 
@@ -201,3 +210,5 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 - **Lingion**: mainline integration, infrastructure, deployment, and repository quality
 - **Kerry1020**: webapp, UI, browser-side behavior, and frontend-facing maintenance
+
+> Single source of truth: `lingion/qdp` and `Kerry1020/qdp` track the same `main` branch and are kept in lockstep.

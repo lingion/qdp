@@ -189,10 +189,19 @@ python -m PyInstaller --clean --noconfirm qdp.spec
 
 - 在线演示：https://3154c1b6.qdp-webapp-demo.pages.dev
 - 部署地址：https://3154c1b6.qdp-webapp-demo.pages.dev
+- 最新 UI：v2.12.0（Apple Music 风格、搜索框清除 X 在圆角矩形内、单行批量下载条）
+- 最后更新：2026-06-14
 
 ### 网页应用预览
 
+搜索结果页，含新的透明 X 按钮（位于搜索圆角矩形内）：
+
 ![qdp webapp preview](docs/screenshots/webapp-home.jpg)
+
+专辑详情页，含新的 Apple Music 风格批量下载条
+（`☐ 全选 · 已选 N 首 · [⬇ 下载] [+ 加入歌单] · 清空`，单行布局，胶囊圆角，玻璃感）：
+
+![qdp webapp album detail](docs/screenshots/webapp-album.jpg)
 
 ### TUI 预览
 
@@ -203,3 +212,5 @@ python -m PyInstaller --clean --noconfirm qdp.spec
 
 - **Lingion**：主线集成、基础设施、部署和仓库质量
 - **Kerry1020**：网页应用、UI、浏览器端行为和前端维护
+
+> 单一源：`lingion/qdp` 和 `Kerry1020/qdp` 跟踪同一个 `main` 分支，始终保持同步。
