@@ -134,15 +134,135 @@ function onMobileDrawerTouchEnd(e){
 
 function setMobileSidebarOpen(open){
   state.mobileSidebarOpen = !!open;
-  const sidebar = $('sidebar');
   const toggle = $('mobileSidebarToggle');
   const overlay = $('mobileSidebarOverlay');
   const mobileOpen = state.mobileSidebarOpen && isMobileLayout();
-  if(sidebar) sidebar.classList.toggle('mobileOpen', mobileOpen);
   if(toggle) toggle.setAttribute('aria-expanded', String(state.mobileSidebarOpen));
   if(overlay) overlay.setAttribute('aria-hidden', String(!mobileOpen));
   document.body.classList.toggle('mobileSidebarOpen', mobileOpen);
+  if(typeof setMobileQueueDrawer === 'function' && isMobileLayout()){
+    setMobileQueueDrawer(mobileOpen);
+  }
   if(!mobileOpen) resetMobileDrawerTouch();
+}
+
+// ═══ Mobile Drawer Control (left nav + right queue) ═══
+let mobileNavDrawerOpen = false;
+let mobileQueueDrawerOpen = false;
+
+function getMobileNavDrawer(){
+  return document.querySelector('.sidebar-nav');
+}
+
+function setMobileNavDrawer(open){
+  if(!isMobileLayout()) return;
+  mobileNavDrawerOpen = !!open;
+  const drawer = getMobileNavDrawer();
+  const backdrop = $('mobileDrawerBackdrop');
+  const menuBtn = $('mobileMenuBtn');
+  if(drawer){
+    drawer.classList.toggle('is-open', mobileNavDrawerOpen);
+    drawer.setAttribute('aria-hidden', String(!mobileNavDrawerOpen));
+  }
+  if(backdrop){
+    backdrop.classList.toggle('is-open', mobileNavDrawerOpen);
+    backdrop.setAttribute('aria-hidden', String(!mobileNavDrawerOpen));
+  }
+  if(menuBtn) menuBtn.setAttribute('aria-expanded', String(mobileNavDrawerOpen));
+  // If opening nav, close queue drawer
+  if(mobileNavDrawerOpen) setMobileQueueDrawer(false);
+  document.body.classList.toggle('mobileNavOpen', mobileNavDrawerOpen);
+}
+
+function setMobileQueueDrawer(open){
+  if(!isMobileLayout()) return;
+  mobileQueueDrawerOpen = !!open;
+  const drawer = $('sidebar');
+  const backdrop = $('queueDrawerBackdrop');
+  const qBtn = $('mobileQueueBtn');
+  if(drawer){
+    drawer.classList.toggle('is-open', mobileQueueDrawerOpen);
+    drawer.setAttribute('aria-hidden', String(!mobileQueueDrawerOpen));
+  }
+  if(backdrop){
+    backdrop.classList.toggle('is-open', mobileQueueDrawerOpen);
+    backdrop.setAttribute('aria-hidden', String(!mobileQueueDrawerOpen));
+  }
+  if(qBtn) qBtn.setAttribute('aria-expanded', String(mobileQueueDrawerOpen));
+  // If opening queue, close nav drawer
+  if(mobileQueueDrawerOpen) setMobileNavDrawer(false);
+}
+
+function closeAllMobileDrawers(){
+  setMobileNavDrawer(false);
+  setMobileQueueDrawer(false);
+}
+
+function syncMobileTopbarTitle(){
+  const titleEl = $('mobileTopbarTitle');
+  const h1 = $('contentTitle');
+  if(titleEl && h1) titleEl.textContent = h1.textContent.trim() || '发现';
+}
+
+function syncQueueBadge(){
+  const badge = $('queueCountBadge');
+  if(!badge) return;
+  const len = Array.isArray(state.queue) ? state.queue.length : 0;
+  if(len > 0){
+    badge.hidden = false;
+    badge.textContent = String(len);
+  } else {
+    badge.hidden = true;
+  }
+}
+
+function hideSearchHistoryPanel(){
+  const panel = $('searchHistoryPanel');
+  if(panel) panel.classList.add('hidden');
+}
+function syncSearchInputs(source = 'desktop'){
+  const desktop = $('q');
+  const mobile = $('mobileQ');
+  if(!desktop || !mobile) return;
+  if(source === 'mobile') desktop.value = mobile.value;
+  else mobile.value = desktop.value;
+  const desktopClear = $('searchClear');
+  if(desktopClear) desktopClear.style.display = (desktop.value || '').trim() ? 'inline-flex' : 'none';
+  const mobileClear = $('mobileSearchClear');
+  if(mobileClear) mobileClear.style.display = (mobile.value || '').trim() ? 'inline-flex' : 'none';
+}
+function renderSearchHistoryPanel(){
+  const panel = $('searchHistoryPanel');
+  if(!panel) return;
+  const items = Array.isArray(state.searchHistory) ? state.searchHistory : [];
+  if(!items.length){
+    panel.innerHTML = '';
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.innerHTML = `<div class="searchHistoryHeader"><span>搜索历史</span><button type="button" class="searchHistoryClearBtn" id="searchHistoryClearBtn">清空</button></div>` +
+    items.map((item)=>`<button type="button" class="searchHistoryItem" data-search-history-item="${esc(item)}">${esc(item)}</button>`).join('');
+  panel.classList.remove('hidden');
+  panel.querySelector('#searchHistoryClearBtn')?.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    state.searchHistory = [];
+    saveSearchHistory([]);
+    hideSearchHistoryPanel();
+  });
+  panel.querySelectorAll('[data-search-history-item]').forEach((btn)=>{
+    btn.addEventListener('click', ()=>{
+      const q = btn.getAttribute('data-search-history-item') || '';
+      $('q').value = q;
+      syncSearchInputs('desktop');
+      hideSearchHistoryPanel();
+      search().catch((err)=>renderEmpty(`Error: ${err.message}`));
+    });
+  });
+}
+function maybeShowSearchHistoryPanel(){
+  const q = ($('q')?.value || '').trim();
+  if(q) return hideSearchHistoryPanel();
+  renderSearchHistoryPanel();
 }
 // ═══ UI Bindings ═══
 
@@ -150,13 +270,17 @@ function handleViewportChange(){
   const mobile = isMobileLayout();
   document.body.classList.toggle('mobileLayout', mobile);
   document.body.classList.toggle('mobileSidebarOpen', mobile && state.mobileSidebarOpen);
-  if(!mobile) setMobileSidebarOpen(false);
-  if(!mobile) setMobileSettingsOpen(false);
+  if(!mobile){
+    setMobileSidebarOpen(false);
+    setMobileSettingsOpen(false);
+    closeAllMobileDrawers();
+  }
   setMobileSidebarTab(state.mobileSidebarTab);
   syncSidebarSections();
-  if(!mobile) setVolumePopoverOpen(false);
-  else setVolumePopoverOpen(true);
+  setVolumePopoverOpen(false);
   document.documentElement.style.setProperty('--app-height', `${window.innerHeight || document.documentElement.clientHeight || 0}px`);
+  syncMobileTopbarTitle();
+  syncQueueBadge();
 }
 function setDesktopSearchFocus(open){
   if(isMobileLayout()) return;
@@ -164,22 +288,84 @@ function setDesktopSearchFocus(open){
 }
 
 function bindUI(){
+  const navDiscover = $('navDiscover');
+  const navSearch = $('navSearch');
+  const navQueue = $('navQueue');
+  const navPlaylists = $('navPlaylists');
+
   document.querySelectorAll('.tab').forEach((b)=>{
     b.addEventListener('click', ()=>{
+      clearTimeout(_searchBlurTimer);
       setActiveTab(b.dataset.type);
-      if(state.q && !$('urlMode').checked) search().catch((e)=>renderEmpty(`Error: ${e.message}`));
+      const currentQuery = isMobileLayout() ? (($('mobileQ')?.value || '').trim()) : (($('q')?.value || '').trim());
+      if(currentQuery){
+        state.q = currentQuery;
+        if(isMobileLayout()) syncSearchInputs('mobile');
+      }
+      document.querySelectorAll('.mobile-tab').forEach((mb)=>{
+        if(mb.dataset.type === b.dataset.type) mb.classList.add('active');
+        else mb.classList.remove('active');
+      });
+      if((state.q || currentQuery) && !$('urlMode').checked){
+        setRoute({ kind: 'search', q: currentQuery || state.q, type: b.dataset.type || 'tracks' }, 'replace');
+        search({ skipRoute: true, preserveHistory: true }).catch((e)=>renderEmpty(`Error: ${e.message}`));
+      }
     });
   });
 
+  // Mobile drawer triggers
+  const menuBtn = $('mobileMenuBtn');
+  if(menuBtn) menuBtn.addEventListener('click', ()=> setMobileNavDrawer(!mobileNavDrawerOpen));
+  const queueBtn = $('mobileQueueBtn');
+  if(queueBtn) queueBtn.addEventListener('click', ()=> setMobileQueueDrawer(!mobileQueueDrawerOpen));
+  const navBackdrop = $('mobileDrawerBackdrop');
+  if(navBackdrop) navBackdrop.addEventListener('click', ()=> setMobileNavDrawer(false));
+  const qBackdrop = $('queueDrawerBackdrop');
+  if(qBackdrop) qBackdrop.addEventListener('click', ()=> setMobileQueueDrawer(false));
+  // Mobile drawer nav items
+  document.querySelectorAll('.mobileNavItem, .sidebar-nav .navItem').forEach((a)=>{
+    a.addEventListener('click', ()=>{
+      const target = a.dataset.target;
+      if(target === 'discover'){ $('navDiscover')?.click(); }
+      else if(target === 'search'){ $('navSearch')?.click(); }
+      else if(target === 'playlists'){ $('navPlaylists')?.click(); }
+      else if(target === 'account'){ $('avatarBtn')?.click(); }
+      setMobileNavDrawer(false);
+    });
+  });
+  // Mobile queue input syncs into main input
+  const qMobile = $('qMobile');
+  if(qMobile){
+    qMobile.addEventListener('input', ()=>{
+      const main = $('q');
+      if(main) main.value = qMobile.value;
+      // Trigger same X toggle logic
+      const clearBtn = $('searchClear');
+      if(clearBtn) clearBtn.style.display = (qMobile.value || '').trim() ? 'inline-flex' : 'none';
+    });
+    qMobile.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        const main = $('q');
+        if(main) main.value = qMobile.value;
+        setMobileNavDrawer(false);
+        $('go')?.click();
+      }
+    });
+  }
+
   $('go').addEventListener('click', ()=>{
+    syncSearchInputs('desktop');
+    hideSearchHistoryPanel();
     const q = ($('q').value || '').trim();
     if(q){
       search().catch((e)=>renderEmpty(`Error: ${e.message}`));
     }else{
-      loadDiscoverRandom(true).catch((e)=>renderEmpty(`Error: ${e.message}`));
+      loadDiscoverRandom(true).then(()=>setRoute({ kind: 'discover' })).catch((e)=>renderEmpty(`Error: ${e.message}`));
     }
   });
-  $('q').addEventListener('keydown', (e)=>{ if(e.key==='Enter') search().catch((err)=>renderEmpty(`Error: ${err.message}`)); });
+  $('q').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ syncSearchInputs('desktop'); hideSearchHistoryPanel(); search().catch((err)=>renderEmpty(`Error: ${err.message}`)); } });
+  $('mobileQ')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ syncSearchInputs('mobile'); hideSearchHistoryPanel(); search().catch((err)=>renderEmpty(`Error: ${err.message}`)); } });
 
   // Show/hide search type tabs and settings gear on input focus/blur
   let _searchBlurTimer = 0;
@@ -187,18 +373,32 @@ function bindUI(){
     clearTimeout(_searchBlurTimer);
     const tabs = $('searchTypeTabs');
     const gear = $('mobileSettingsBtn');
-    if(tabs) tabs.classList.remove('hidden');
+    const mobileTabs = $('mobileSearchTypeTabs');
+    if(tabs && !isMobileLayout()) tabs.classList.remove('hidden');
     if(gear) gear.classList.remove('hidden');
+    if(mobileTabs && isMobileLayout()) mobileTabs.classList.remove('hidden');
     setDesktopSearchFocus(true);
+    maybeShowSearchHistoryPanel();
+  });
+  $('mobileQ')?.addEventListener('focus', ()=>{
+    clearTimeout(_searchBlurTimer);
+    $('mobileSearchTypeTabs')?.classList.remove('hidden');
+    syncSearchInputs('mobile');
   });
   $('q').addEventListener('blur', ()=>{
     _searchBlurTimer = setTimeout(()=>{
       const tabs = $('searchTypeTabs');
       const gear = $('mobileSettingsBtn');
+      const mobileTabs = $('mobileSearchTypeTabs');
       if(tabs) tabs.classList.add('hidden');
       if(gear) gear.classList.add('hidden');
+      if(mobileTabs) mobileTabs.classList.add('hidden');
       setDesktopSearchFocus(false);
+      hideSearchHistoryPanel();
     }, 200);
+  });
+  $('mobileQ')?.addEventListener('blur', ()=>{
+    _searchBlurTimer = setTimeout(()=> $('mobileSearchTypeTabs')?.classList.add('hidden'), 200);
   });
 
   // Search type tabs: focus-aware visibility
@@ -210,14 +410,26 @@ function bindUI(){
     goBtn.classList.toggle('primary', !!q);
   }
   $('q').addEventListener('input', ()=>{
+    syncSearchInputs('desktop');
     updateGoButton();
-    const clearBtn = $('searchClear');
-    if(clearBtn) clearBtn.style.display = ($('q').value || '').trim() ? 'inline-flex' : 'none';
+    maybeShowSearchHistoryPanel();
+  });
+  $('mobileQ')?.addEventListener('input', ()=>{
+    syncSearchInputs('mobile');
+    state.q = ($('mobileQ').value || '').trim();
+    updateGoButton();
   });
   $('searchClear')?.addEventListener('click', ()=>{
     $('q').value = '';
+    syncSearchInputs('desktop');
     $('q').focus();
-    $('searchClear').hidden = true;
+    updateGoButton();
+    maybeShowSearchHistoryPanel();
+  });
+  $('mobileSearchClear')?.addEventListener('click', ()=>{
+    $('mobileQ').value = '';
+    syncSearchInputs('mobile');
+    $('mobileQ').focus();
     updateGoButton();
   });
   if(searchTypeTabs){
@@ -265,11 +477,39 @@ function bindUI(){
       return;
     }
   });
+  if(navDiscover) navDiscover.addEventListener('click', async ()=>{
+    hideSearchHistoryPanel();
+    if(($('q').value || '').trim()){
+      setRoute({ kind: 'search', q: ($('q').value || '').trim(), type: state.type || 'tracks' });
+      await search({ replaceRoute: true, preserveHistory: true });
+    }else{
+      setRoute({ kind: 'discover' });
+      await loadDiscoverRandom(true);
+    }
+  });
+  if(navSearch) navSearch.addEventListener('click', async ()=>{
+    hideSearchHistoryPanel();
+    setRoute({ kind: 'search', q: ($('q').value || '').trim(), type: state.type || 'tracks' });
+    await search({ replaceRoute: true, preserveHistory: true });
+  });
+  if(navQueue) navQueue.addEventListener('click', ()=>{
+    setRoute({ kind: 'queue' });
+    if(isMobileLayout()) setMobileQueueDrawer(true);
+  });
+  if(navPlaylists) navPlaylists.addEventListener('click', ()=>{
+    setRoute({ kind: 'playlists' });
+    if(isMobileLayout()) setMobileQueueDrawer(true);
+  });
   $('backTop').addEventListener('click', goBack);
+  const desktopBackBtn = $('desktopBackBtn');
+  if(desktopBackBtn) desktopBackBtn.addEventListener('click', goBack);
   const dockMenuBtn = $('dockMenuBtn');
   if(dockMenuBtn) dockMenuBtn.addEventListener('click', ()=>{
     if(isMobileLayout()){
       setMobileSidebarOpen(!state.mobileSidebarOpen);
+    } else {
+      const panel = $('sidebar');
+      if(panel) panel.classList.toggle('open');
     }
   });
   $('mobileSidebarToggle').addEventListener('click', ()=>setMobileSidebarOpen(!state.mobileSidebarOpen));
@@ -582,6 +822,11 @@ async function main(){
   loadCacheStats();
   // Pre-load default download path so bulk downloads don't land in cwd
   fetchDefaultDownloadPath().then((p)=>{ if(p) _downloadModalState.defaultPath = p; }).catch(()=>{});
+
+  if(location.pathname !== '/app/' && location.pathname !== '/app'){
+    await restoreRouteFromLocation();
+    return;
+  }
   if(!state.queue.length && !($('q').value || '').trim()){
     // Check for deep-link hash before loading discover
     const h = location.hash.slice(1);
@@ -648,4 +893,8 @@ window.addEventListener('hashchange', ()=>{
     const id = h.split('/')[2];
     if(id) openPlaylist(id);
   }
+});
+
+window.addEventListener('popstate', ()=>{
+  restoreRouteFromLocation().catch((err)=>console.error('route restore failed', err));
 });

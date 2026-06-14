@@ -12,7 +12,7 @@ function renderDiscoverRandom(albums, seed = ''){
       <div class="discoverHead">
         <div>
           <div class="discoverTitle">随机专辑</div>
-          <div class="discoverSub">${esc(seed ? `基于 ${seed} 的随机结果` : '给首页一点内容，不再留白')}</div>
+          <div class="discoverSub">${esc(seed ? `${seed}` : '随机推荐')}</div>
         </div>
         <button id="refreshDiscover" class="btn small">换一批</button>
       </div>
@@ -27,7 +27,7 @@ function renderDiscoverRandom(albums, seed = ''){
       grid.appendChild(empty);
     }else{
       albums.forEach((it)=>{
-        grid.appendChild(card(it.image, it.title, joinMetaParts([it.artist, it.year]), ()=>openAlbum(it.id), [
+        grid.appendChild(card(it.image, it.title, joinMetaParts([it.artist]), ()=>openAlbum(it.id), [
           makeAlbumDownloadLink(it, 'Download album'),
           makeIconButton('play', ()=>playAlbumNow(it.id), 'Play album'),
           makeIconButton('plus', async ()=>{ const full = await fetchAlbum(it.id); const tracks = (full?.tracks||[]).map(normTrack).filter(Boolean); choosePlaylistForTracks(tracks); }, 'Add to playlist'),
@@ -54,7 +54,7 @@ async function loadDiscoverRandom(force = false){
   }catch(err){
     if(seq !== _discoverSeq) return state.discoverRandom.albums;
     state.discoverRandom.error = err.message;
-    renderEmpty(`推荐专辑加载失败：${err.message}`);
+    renderEmpty(`推荐专辑加载失败:${err.message}`);
     return [];
   }finally{
     if(seq === _discoverSeq) state.discoverRandom.loading = false;
