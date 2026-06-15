@@ -18,7 +18,65 @@ Sprint 1 establishes the delivery baseline by documenting scope, backup rules, r
 - pip
 - Qobuz account credentials/config available locally
 
-## Install
+## Quick Install (one-click)
+
+Cross-platform support: **macOS** / **Linux** / **Windows** / **Android (Termux)** / **WSL**
+
+### macOS / Linux / Termux / WSL / Git Bash
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lingion/qdp/main/install.sh | bash
+```
+
+Custom install directory:
+
+```bash
+bash install.sh ~/my-qdp
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/lingion/qdp/main/install.ps1 | iex
+```
+
+Or with custom directory:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -InstallDir C:\qdp
+```
+
+### Manual clone + install
+
+```bash
+git clone https://github.com/lingion/qdp.git
+cd qdp
+bash install.sh        # macOS / Linux / Termux / Git Bash
+# or
+powershell -File install.ps1   # Windows PowerShell
+```
+
+The installer automatically:
+- 🔍 Detects your platform (macOS / Linux / Windows / Termux / WSL)
+- 🐍 Finds Python 3.9+ (tries `python3`, `python`, `py` ...)
+- 📦 Clones or updates the repo from GitHub
+- 📂 Creates a virtual environment (`.venv`)
+- 📥 Installs all runtime dependencies
+- ✅ Verifies the installation
+
+### Platform Notes
+
+| Platform | Installer | Venv activate | Notes |
+|----------|-----------|---------------|-------|
+| **macOS** | `install.sh` | `source .venv/bin/activate` | Needs Xcode CLI tools (`xcode-select --install`) |
+| **Linux** | `install.sh` | `source .venv/bin/activate` | `sudo apt install python3-venv` if venv missing |
+| **Windows (Git Bash)** | `install.sh` | `source .venv/Scripts/activate` | Install [Git for Windows](https://git-scm.com/download/win) first |
+| **Windows (PowerShell)** | `install.ps1` | `.\.venv\Scripts\Activate.ps1` | Run `Set-ExecutionPolicy RemoteSigned` if needed |
+| **Android (Termux)** | `install.sh` | `source .venv/bin/activate` | `pkg install python git` first |
+| **WSL** | `install.sh` | `source .venv/bin/activate` | Same as Linux |
+
+## Manual Install
+
 Create a virtual environment and install runtime dependencies:
 
 ```bash
