@@ -616,6 +616,15 @@ async function search(options = {}){
   pushSearchHistory(q);
   if(!options.skipRoute) setRoute({ kind: 'search', q, type: state.type }, options.replaceRoute ? 'replace' : 'push');
   if(!options.preserveHistory) clearHistory();
+  // Sync content title for both desktop (#contentTitle) and mobile (#mobileTopbarTitle)
+  const ct = $('contentTitle');
+  if(ct) ct.textContent = '搜索结果';
+  const mt = $('mobileTopbarTitle');
+  if(mt) mt.textContent = '搜索结果';
+  // On mobile, force show the search-type tabs while a query is active
+  if(typeof isMobileLayout === 'function' && isMobileLayout()){
+    document.querySelectorAll('.mobile-search-type-tabs').forEach(el => el.classList.remove('hidden'));
+  }
   renderLoadingSkeleton('cards');
 
   if($('urlMode').checked){
