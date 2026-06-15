@@ -332,8 +332,7 @@
         if (sidebar) sidebar.classList.toggle('open');
       }
     }
-    if (navQueue) navQueue.addEventListener('click', toggleSidebar);
-    if (navPlaylists) navPlaylists.addEventListener('click', toggleSidebar);
+    // navQueue / navPlaylists click handlers are authoritative in app.js
 
     if (navDiscover) navDiscover.addEventListener('click', function(){
       if (typeof loadDiscoverRandom === 'function') loadDiscoverRandom(true);

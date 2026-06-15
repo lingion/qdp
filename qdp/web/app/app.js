@@ -494,11 +494,25 @@ function bindUI(){
   });
   if(navQueue) navQueue.addEventListener('click', ()=>{
     setRoute({ kind: 'queue' });
+    state.activeSidePanel = 'queue';
+    state.sidebarSections.queue = true;
+    syncSidebarSections();
     if(isMobileLayout()) setMobileQueueDrawer(true);
+    else {
+      const panel = $('sidebar');
+      if(panel) panel.classList.add('open');
+    }
   });
   if(navPlaylists) navPlaylists.addEventListener('click', ()=>{
     setRoute({ kind: 'playlists' });
+    state.activeSidePanel = 'playlists';
+    state.sidebarSections.playlists = true;
+    syncSidebarSections();
     if(isMobileLayout()) setMobileQueueDrawer(true);
+    else {
+      const panel = $('sidebar');
+      if(panel) panel.classList.add('open');
+    }
   });
   $('backTop').addEventListener('click', goBack);
   const desktopBackBtn = $('desktopBackBtn');
@@ -509,7 +523,15 @@ function bindUI(){
       setMobileSidebarOpen(!state.mobileSidebarOpen);
     } else {
       const panel = $('sidebar');
-      if(panel) panel.classList.toggle('open');
+      if(panel){
+        if(panel.classList.contains('open')){
+          panel.classList.remove('open');
+          state.activeSidePanel = null;
+          syncSidebarSections();
+        } else {
+          panel.classList.add('open');
+        }
+      }
     }
   });
   $('mobileSidebarToggle').addEventListener('click', ()=>setMobileSidebarOpen(!state.mobileSidebarOpen));
@@ -665,6 +687,16 @@ function bindUI(){
       const settingsBackdrop = e.target.closest('.mobileSettingsBackdrop');
       if(!settingsBtn && !settingsPanel && !settingsBackdrop){
         setMobileSettingsOpen(false);
+      }
+    }
+    // Close sidebar on outside click (desktop)
+    const sidebar = $('sidebar');
+    if(sidebar && sidebar.classList.contains('open') && !isMobileLayout()){
+      const dockMenuBtn = $('dockMenuBtn');
+      if(!sidebar.contains(e.target) && e.target !== dockMenuBtn && !(dockMenuBtn && dockMenuBtn.contains(e.target))){
+        sidebar.classList.remove('open');
+        state.activeSidePanel = null;
+        syncSidebarSections();
       }
     }
     if(!state.downloadMenu.open) return;
