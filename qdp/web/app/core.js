@@ -430,6 +430,7 @@ const state = {
   muted: localStorage.getItem(MUTED_KEY) === '1',
   volumePopoverOpen: false,
   sidebarSections: { queue: true, playlists: false },
+  activeSidePanel: null,
   lastNonZeroVolume: (()=>{ const v = clampVolume(localStorage.getItem(LAST_NONZERO_VOLUME_KEY)); return (v > 0) ? v : 1; })(),
   queue: [],
   idx: -1,
@@ -585,6 +586,13 @@ function persistVolumeState(){
 }
 function setAudioEventGate(kind = ''){
   state.audioEventGate = String(kind || '');
+}
+function consumeAudioEventGate(kind = ''){
+  const expected = String(kind || '');
+  if(!expected) return false;
+  if(String(state.audioEventGate || '') !== expected) return false;
+  state.audioEventGate = '';
+  return true;
 }
 function nextAsyncRequestVersion(scope = 'default'){
   const key = String(scope || 'default');
@@ -784,6 +792,21 @@ function syncSidebarSections(){
     }
     if(body) body.classList.toggle('collapsed', !expanded);
   });
+  // Separate panels: show/hide based on activeSidePanel
+  const queueCard = document.querySelector('.sideCard:nth-child(1)');
+  const playlistsCard = document.querySelector('.sideCard:nth-child(2)');
+  if(state.activeSidePanel === 'queue'){
+    if(queueCard) queueCard.style.display = '';
+    if(playlistsCard) playlistsCard.style.display = 'none';
+    state.sidebarSections.queue = true;
+  } else if(state.activeSidePanel === 'playlists'){
+    if(queueCard) queueCard.style.display = 'none';
+    if(playlistsCard) playlistsCard.style.display = '';
+    state.sidebarSections.playlists = true;
+  } else {
+    if(queueCard) queueCard.style.display = '';
+    if(playlistsCard) playlistsCard.style.display = '';
+  }
   // Mobile UI side-effects
   if(typeof syncQueueBadge === 'function') syncQueueBadge();
   if(typeof syncMobileTopbarTitle === 'function') syncMobileTopbarTitle();
@@ -1694,7 +1717,7 @@ async function confirmDownloadModal(){
   try{
     const id = encodeURIComponent(t.id);
     const path = encodeURIComponent(downloadPath);
-    const res = await api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}&workers=${workers}`, { timeout: 600000 });
+    const res = await api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}&workers=${workers}`, { method: 'POST', timeout: 600000 });
 
     const savedPath = res?.path || downloadPath;
     showToast(`文件已保存至: ${savedPath}`, 'success', 5000);
@@ -1858,7 +1881,7 @@ function triggerTrackDownload(track, fmt = currentQuality()){
   }
   const path = encodeURIComponent(downloadPath);
   const embed = $('downloadModalEmbedCover')?.checked !== false ? '1' : '0';
-  api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}`, { timeout: 600000 })
+  api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}`, { method: 'POST', timeout: 600000 })
     .then((res) => {
       const savedPath = res?.path || downloadPath;
       showToast(`文件已保存至: ${savedPath}`, 'success', 5000);
@@ -1920,7 +1943,7 @@ function triggerBulkAlbumDownload(albumId, tracks, fmt = currentQuality(), downl
     // Single album download using download_release
     const id = encodeURIComponent(effectiveAlbumId);
     const p = encodeURIComponent(path);
-    api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${p}&embed=${embed}&type=album&album_id=${id}`, { timeout: 600000 })
+    api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${p}&embed=${embed}&type=album&album_id=${id}`, { method: 'POST', timeout: 600000 })
       .then((res) => {
         const savedPath = res?.path || path;
         const label = title || '专辑';

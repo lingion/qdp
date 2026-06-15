@@ -60,6 +60,8 @@ _ENTITY_CACHE_LOCK = threading.Lock()
 _ENTITY_CACHE: Dict[tuple, dict] = {}
 _ENTITY_CACHE_TTL = 1800
 _ENTITY_CACHE_MAX = 1024
+_AUDIO_CACHE_INFLIGHT_LOCK = threading.Lock()
+_AUDIO_CACHE_INFLIGHT = set()
 _MAX_STREAM_BYTES = 800 * 1024 * 1024  # 800 MB hard cap per stream
 _DISCOVER_RANDOM_SEEDS = ["jazz", "classical", "pop", "new", "electronic", "soundtrack"]
 
@@ -219,6 +221,13 @@ def _normalize_track(item: dict, image_fallback: str = "") -> dict:
     }
     payload.update(audio_spec)
     return payload
+
+
+def _parse_int_safe(val, default: int = 0) -> int:
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
 
 
 def _sanitize_download_filename(name: str, fallback: str = "track") -> str:
@@ -601,6 +610,66 @@ def _audio_cache_file(track_id: str, fmt: int, upstream_url: str = "") -> str:
     return os.path.join(_AUDIO_CACHE_ROOT, filename)
 
 
+def _find_audio_cache_candidate(track_id: str, fmt: int, allow_partial: bool = True, min_partial_bytes: int = 128 * 1024):
+    prefix = f"{re.sub(r'[^A-Za-z0-9._-]+', '_', str(track_id))[:120]}_{int(fmt)}"
+    if not os.path.isdir(_AUDIO_CACHE_ROOT):
+        return None, False
+    partial_candidate = None
+    for name in os.listdir(_AUDIO_CACHE_ROOT):
+        if not name.startswith(prefix):
+            continue
+        fp = os.path.join(_AUDIO_CACHE_ROOT, name)
+        if not os.path.isfile(fp):
+            continue
+        if not name.endswith('.part'):
+            return fp, False
+        partial_candidate = fp
+    if allow_partial and partial_candidate:
+        try:
+            if os.path.getsize(partial_candidate) >= int(min_partial_bytes):
+                return partial_candidate, True
+        except OSError:
+            return None, False
+    return None, False
+
+
+def _prime_audio_cache(track_id: str, fmt: int, upstream_url: str) -> None:
+    cache_file = _audio_cache_file(track_id, fmt, upstream_url)
+    if not track_id or not upstream_url or os.path.isfile(cache_file):
+        return
+    with _AUDIO_CACHE_INFLIGHT_LOCK:
+        if cache_file in _AUDIO_CACHE_INFLIGHT:
+            return
+        _AUDIO_CACHE_INFLIGHT.add(cache_file)
+
+    def _worker() -> None:
+        cache_tmp = cache_file + '.part'
+        try:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            r = requests.get(upstream_url, headers={"User-Agent": _get_user_agent()}, stream=True, timeout=60)
+            r.raise_for_status()
+            total = 0
+            with open(cache_tmp, 'wb') as fp:
+                for chunk in r.iter_content(chunk_size=1024 * 64):
+                    if not chunk:
+                        continue
+                    fp.write(chunk)
+                    total += len(chunk)
+                    if total > _MAX_STREAM_BYTES:
+                        raise OSError("stream exceeded cache limit")
+            os.replace(cache_tmp, cache_file)
+            logger.info("Primed audio cache for track %s fmt %s -> %s", track_id, fmt, cache_file)
+        except Exception as exc:
+            logger.warning("Failed to prime audio cache for track %s fmt %s: %s", track_id, fmt, exc)
+            with contextlib.suppress(OSError):
+                os.remove(cache_tmp)
+        finally:
+            with _AUDIO_CACHE_INFLIGHT_LOCK:
+                _AUDIO_CACHE_INFLIGHT.discard(cache_file)
+
+    threading.Thread(target=_worker, name=f"qdp-cache-{track_id}", daemon=True).start()
+
+
 def _client_cache_key(defaults: Optional[dict] = None) -> str:
     defaults = defaults or _get_runtime_defaults()
     active_account = get_active_account(CONFIG_FILE) or "default"
@@ -726,6 +795,10 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             self._handle_app_api(parsed)
             return
 
+        if path == "/api/download-tagged":
+            self._handle_app_api(parsed)
+            return
+
         if path.startswith("/api.json/0.2/"):
             self._handle_qobuz_api_proxy(parsed, method="POST")
             return
@@ -748,6 +821,43 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         _REQUEST_TRACE.append(item)
         if len(_REQUEST_TRACE) > _TRACE_LIMIT:
             del _REQUEST_TRACE[: max(0, len(_REQUEST_TRACE) - _TRACE_LIMIT)]
+
+    def do_HEAD(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        qs = urllib.parse.parse_qs(parsed.query or "")
+        self._trace("HEAD", path)
+
+        if path == "/api/cached-track":
+            tid = (qs.get("id") or [""])[0]
+            try:
+                fmt = self._parse_int_query(qs, "fmt", 5, minimum=5)
+            except ValueError as exc:
+                self._send_api_error(400, "invalid_query", str(exc))
+                return
+            if not tid:
+                self._send_api_error(400, "missing_id", "missing track id")
+                return
+            fp, is_partial = _find_audio_cache_candidate(tid, fmt, allow_partial=True)
+            if fp:
+                self.send_response(HTTPStatus.OK)
+                self._send_cors_headers()
+                self.send_header("Content-Type", _guess_content_type(fp[:-5] if fp.endswith('.part') else fp))
+                with contextlib.suppress(OSError):
+                    self.send_header("Content-Length", str(os.path.getsize(fp)))
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("X-QDP-Partial-Cache", "1" if is_partial else "0")
+                self.end_headers()
+                return
+            self._send_api_error(404, "cache_miss", "cached track not found")
+            return
+
+        if path.startswith("/app") or path.startswith("/static") or path == "/":
+            self.do_GET()
+            return
+
+        self.send_error(HTTPStatus.METHOD_NOT_ALLOWED, "HEAD not allowed")
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -1364,6 +1474,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                 return
             prox = "/stream?url=" + urllib.parse.quote(raw_url, safe="") + "&track_id=" + urllib.parse.quote(str(tid), safe="") + "&fmt=" + urllib.parse.quote(str(fmt), safe="")
             cached = f"/api/cached-track?id={urllib.parse.quote(str(tid), safe='')}&fmt={fmt}"
+            _prime_audio_cache(str(tid), fmt, raw_url)
             self._send_api_success({"url": prox, "cached_url": cached, "download_url": f"/api/download?id={urllib.parse.quote(str(tid), safe='')}&fmt={fmt}"})
             return
 
@@ -1439,26 +1550,23 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             if not tid:
                 self._send_api_error(400, "missing_id", "missing track id")
                 return
-            prefix = f"{re.sub(r'[^A-Za-z0-9._-]+', '_', str(tid))[:120]}_{int(fmt)}"
-            if os.path.isdir(_AUDIO_CACHE_ROOT):
-                for name in os.listdir(_AUDIO_CACHE_ROOT):
-                    if name.startswith(prefix):
-                        fp = os.path.join(_AUDIO_CACHE_ROOT, name)
-                        if os.path.isfile(fp):
-                            try:
-                                with open(fp, "rb") as f:
-                                    body = f.read()
-                                self.send_response(HTTPStatus.OK)
-                                self._send_cors_headers()
-                                self.send_header("Content-Type", _guess_content_type(fp))
-                                self.send_header("Content-Length", str(len(body)))
-                                self.send_header("Accept-Ranges", "bytes")
-                                self.send_header("Cache-Control", "public, max-age=86400")
-                                self.end_headers()
-                                self.wfile.write(body)
-                                return
-                            except OSError:
-                                break
+            fp, is_partial = _find_audio_cache_candidate(tid, fmt, allow_partial=True)
+            if fp:
+                try:
+                    with open(fp, "rb") as f:
+                        body = f.read()
+                    self.send_response(HTTPStatus.OK)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", _guess_content_type(fp[:-5] if fp.endswith('.part') else fp))
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.send_header("X-QDP-Partial-Cache", "1" if is_partial else "0")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                except OSError:
+                    pass
             self._send_api_error(404, "cache_miss", "cached track not found")
             return
 
@@ -1467,6 +1575,131 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                 "default_path": os.path.expanduser("~/Music/qdp"),
                 "workers": 3
             })
+            return
+
+        if path == "/api/download-tagged":
+            self._send_api_success_async = False
+            try:
+                body_len = int(self.headers.get("Content-Length", 0))
+                post_data = json.loads(self.rfile.read(body_len)) if body_len else {}
+            except (ValueError, JSONDecodeError):
+                post_data = {}
+            tid = str((post_data.get("id")) or (qs.get("id") or [""])[0]).strip()
+            if not tid:
+                self._send_api_error(400, "missing_id", "missing track id")
+                return
+            dl_type = str(post_data.get("type") or (qs.get("type") or [""])[0] or "track").strip().lower()
+            fmt = _parse_int_safe(post_data.get("fmt") or (qs.get("fmt") or [""])[0], 5)
+            if fmt < 5:
+                fmt = 5
+            dl_path = str(post_data.get("path") or (qs.get("path") or [""])[0] or os.path.expanduser("~/Music/qdp")).strip()
+            embed = str(post_data.get("embed") or (qs.get("embed") or [""])[0] or "1").strip()
+            workers = _parse_int_safe(post_data.get("workers") or (qs.get("workers") or [""])[0], 3)
+
+            # Extend timeout
+            self.timeout = 600
+
+            try:
+                if dl_type == "track":
+                    u = client.get_track_url(tid, fmt)
+                    raw_url = (u or {}).get("url")
+                    if not raw_url:
+                        self._send_api_error(502, "missing_upstream_url", "missing url")
+                        return
+                    try:
+                        track_meta = client.get_track_meta(tid)
+                        filename = _download_filename_for_track(track_meta, fmt)
+                    except Exception:
+                        filename = f"track_{tid}{_download_extension_for_fmt(fmt)}"
+                    os.makedirs(dl_path, exist_ok=True)
+                    save_path = os.path.join(dl_path, filename)
+                    proxy_str = get_active_proxy()
+                    req_proxies = {"http": proxy_str, "https": proxy_str} if proxy_str else None
+                    resp = requests.get(raw_url, stream=True, timeout=300, proxies=req_proxies)
+                    resp.raise_for_status()
+                    with open(save_path, "wb") as f:
+                        for chunk in resp.iter_content(8192):
+                            f.write(chunk)
+                    self._send_api_success({"path": save_path, "filename": filename})
+                elif dl_type == "album":
+                    tracks = client.get_album_tracks(tid)
+                    if not tracks:
+                        self._send_api_error(404, "album_empty", "album has no tracks")
+                        return
+                    album_meta = client.get_album_meta(tid)
+                    album_name = _sanitize_download_filename((album_meta or {}).get("title") or f"album_{tid}")
+                    album_dir = os.path.join(dl_path, album_name)
+                    os.makedirs(album_dir, exist_ok=True)
+                    proxy_str = get_active_proxy()
+                    req_proxies = {"http": proxy_str, "https": proxy_str} if proxy_str else None
+                    for i, trk in enumerate(tracks):
+                        trk_id = trk.get("id")
+                        if not trk_id:
+                            continue
+                        try:
+                            trk_url_info = client.get_track_url(str(trk_id), fmt)
+                            trk_raw_url = (trk_url_info or {}).get("url")
+                            if not trk_raw_url:
+                                continue
+                            try:
+                                trk_meta = client.get_track_meta(str(trk_id))
+                                trk_filename = f"{i+1:02d} - {_download_filename_for_track(trk_meta, fmt)}"
+                            except Exception:
+                                trk_filename = f"{i+1:02d} - track_{trk_id}{_download_extension_for_fmt(fmt)}"
+                            trk_save = os.path.join(album_dir, trk_filename)
+                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=req_proxies)
+                            r.raise_for_status()
+                            with open(trk_save, "wb") as f:
+                                for chunk in r.iter_content(8192):
+                                    f.write(chunk)
+                        except Exception as e:
+                            logger.warning("Failed to download album track %s: %s", trk_id, e)
+                    self._send_api_success({"path": album_dir, "filename": album_name})
+                elif dl_type == "playlist":
+                    raw_tracks = post_data.get("tracks") or post_data.get("tracks_ids") or []
+                    if not isinstance(raw_tracks, list):
+                        raw_tracks = []
+                    # Frontend sends track objects [{id:..., title:...}, ...]; extract ids
+                    track_ids = []
+                    for t in raw_tracks:
+                        if isinstance(t, dict) and t.get("id"):
+                            track_ids.append(str(t["id"]))
+                        elif isinstance(t, (int, float, str)):
+                            track_ids.append(str(t))
+                    if not track_ids:
+                        self._send_api_error(400, "missing_tracks", "no track ids provided for playlist download")
+                        return
+                    pl_dir = os.path.join(dl_path, f"playlist_{tid}")
+                    os.makedirs(pl_dir, exist_ok=True)
+                    proxy_str = get_active_proxy()
+                    req_proxies = {"http": proxy_str, "https": proxy_str} if proxy_str else None
+                    for i, trk_id in enumerate(track_ids):
+                        try:
+                            trk_url_info = client.get_track_url(str(trk_id), fmt)
+                            trk_raw_url = (trk_url_info or {}).get("url")
+                            if not trk_raw_url:
+                                continue
+                            try:
+                                trk_meta = client.get_track_meta(str(trk_id))
+                                trk_filename = f"{i+1:02d} - {_download_filename_for_track(trk_meta, fmt)}"
+                            except Exception:
+                                trk_filename = f"{i+1:02d} - track_{trk_id}{_download_extension_for_fmt(fmt)}"
+                            trk_save = os.path.join(pl_dir, trk_filename)
+                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=req_proxies)
+                            r.raise_for_status()
+                            with open(trk_save, "wb") as f:
+                                for chunk in r.iter_content(8192):
+                                    f.write(chunk)
+                        except Exception as e:
+                            logger.warning("Failed to download playlist track %s: %s", trk_id, e)
+                    self._send_api_success({"path": pl_dir})
+                else:
+                    self._send_api_error(400, "invalid_type", f"unsupported type: {dl_type}")
+            except requests.exceptions.RequestException as exc:
+                self._send_api_error(502, "download_failed", str(exc)[:200])
+            except Exception as exc:
+                logger.exception("download-tagged error: %s", exc)
+                self._send_api_error(500, "download_error", str(exc)[:200])
             return
 
         self._send_api_error(404, "not_found", "not found")
