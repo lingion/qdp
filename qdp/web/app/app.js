@@ -530,6 +530,11 @@ function bindUI(){
           syncSidebarSections();
         } else {
           panel.classList.add('open');
+          if(!state.activeSidePanel){
+            state.activeSidePanel = 'queue';
+            state.sidebarSections.queue = true;
+            syncSidebarSections();
+          }
         }
       }
     }
