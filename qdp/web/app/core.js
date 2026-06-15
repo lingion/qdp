@@ -1717,7 +1717,7 @@ async function confirmDownloadModal(){
   try{
     const id = encodeURIComponent(t.id);
     const path = encodeURIComponent(downloadPath);
-    const res = await api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}&workers=${workers}`, { timeout: 600000 });
+    const res = await api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}&workers=${workers}`, { method: 'POST', timeout: 600000 });
 
     const savedPath = res?.path || downloadPath;
     showToast(`文件已保存至: ${savedPath}`, 'success', 5000);
@@ -1881,7 +1881,7 @@ function triggerTrackDownload(track, fmt = currentQuality()){
   }
   const path = encodeURIComponent(downloadPath);
   const embed = $('downloadModalEmbedCover')?.checked !== false ? '1' : '0';
-  api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}`, { timeout: 600000 })
+  api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}`, { method: 'POST', timeout: 600000 })
     .then((res) => {
       const savedPath = res?.path || downloadPath;
       showToast(`文件已保存至: ${savedPath}`, 'success', 5000);
@@ -1943,7 +1943,7 @@ function triggerBulkAlbumDownload(albumId, tracks, fmt = currentQuality(), downl
     // Single album download using download_release
     const id = encodeURIComponent(effectiveAlbumId);
     const p = encodeURIComponent(path);
-    api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${p}&embed=${embed}&type=album&album_id=${id}`, { timeout: 600000 })
+    api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${p}&embed=${embed}&type=album&album_id=${id}`, { method: 'POST', timeout: 600000 })
       .then((res) => {
         const savedPath = res?.path || path;
         const label = title || '专辑';
