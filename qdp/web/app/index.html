@@ -7,7 +7,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/app/app.css?v=2.13.0" />
+  <link rel="stylesheet" href="/app/app.css?v=2.14.0" />
 </head>
 <body>
   <div id="toastContainer"></div>
@@ -182,29 +182,7 @@
       </div>
 
       <div class="dock-center">
-        <div class="dock-controls">
-          <button id="shuffleMain" class="iconBtn" type="button" aria-label="随机播放">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-1.5V5.56l-4.06 4.06-1.06-1.06L18.44 4.5H16V3ZM4 7h2.7c1.13 0 2.2.45 3 1.24l1.82 1.82-1.06 1.06-1.82-1.82A2.74 2.74 0 0 0 6.7 8.5H4V7Zm10.38 5.56 1.06 1.06-4.88 4.88A4.22 4.22 0 0 1 7.56 20H4v-1.5h3.56c.72 0 1.4-.28 1.91-.79l4.91-4.91ZM18.44 19.5l-4.06-4.06 1.06-1.06 4.06 4.06V16H21v5h-5v-1.5h2.44ZM4 15.5v-1.5h2.7c.54 0 1.06-.16 1.5-.47l1.4 1.08c-.83.57-1.79.89-2.9.89H4Z" fill="currentColor"/></svg>
-          </button>
-          <button id="shuffle" class="iconBtn ghost-compat" type="button" aria-label="随机播放（兼容）">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-1.5V5.56l-4.06 4.06-1.06-1.06L18.44 4.5H16V3ZM4 7h2.7c1.13 0 2.2.45 3 1.24l1.82 1.82-1.06 1.06-1.82-1.82A2.74 2.74 0 0 0 6.7 8.5H4V7Zm10.38 5.56 1.06 1.06-4.88 4.88A4.22 4.22 0 0 1 7.56 20H4v-1.5h3.56c.72 0 1.4-.28 1.91-.79l4.91-4.91ZM18.44 19.5l-4.06-4.06 1.06-1.06 4.06 4.06V16H21v5h-5v-1.5h2.44ZM4 15.5v-1.5h2.7c.54 0 1.06-.16 1.5-.47l1.4 1.08c-.83.57-1.79.89-2.9.89H4Z" fill="currentColor"/></svg>
-          </button>
-          <button id="prev" class="iconBtn" type="button" aria-label="上一首">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h1.5v14H6V5Zm11.5 1.7v10.6c0 .63-.7 1.01-1.24.68l-7.52-5.3a.82.82 0 0 1 0-1.36l7.52-5.3c.54-.33 1.24.05 1.24.68Z" fill="currentColor"/></svg>
-          </button>
-          <button id="play" class="iconBtn primary play-btn" type="button" aria-label="播放或暂停">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72c0 .78.87 1.26 1.54.84l10.79-6.86c.62-.39.62-1.29 0-1.68L9.54 4.3C8.87 3.88 8 4.36 8 5.14Z" fill="currentColor"/></svg>
-          </button>
-          <button id="next" class="iconBtn" type="button" aria-label="下一首">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 5H18v14h-1.5V5ZM6.5 6.7v10.6c0 .63.7 1.01 1.24.68l7.52-5.3a.82.82 0 0 0 0-1.36l-7.52-5.3c-.54-.33-1.24.05-1.24.68Z" fill="currentColor"/></svg>
-          </button>
-          <button id="repeatMain" class="iconBtn" type="button" aria-label="循环">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6.5h-9a2.5 2.5 0 0 0-2.5 2.5v1H3.5V9A4 4 0 0 1 7.5 5h9V2.75L21 6.5l-4.5 3.75V6.5Zm-9 11h9a2.5 2.5 0 0 0 2.5-2.5v-1h1.5v1a4 4 0 0 1-4 4h-9v2.25L3 17.5l4.5-3.75V17.5Z" fill="currentColor"/></svg>
-          </button>
-          <button id="repeat" class="iconBtn ghost-compat" type="button" aria-label="循环（兼容）">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6.5h-9a2.5 2.5 0 0 0-2.5 2.5v1H3.5V9A4 4 0 0 1 7.5 5h9V2.75L21 6.5l-4.5 3.75V6.5Zm-9 11h9a2.5 2.5 0 0 0 2.5-2.5v-1h1.5v1a4 4 0 0 1-4 4h-9v2.25L3 17.5l4.5-3.75V17.5Z" fill="currentColor"/></svg>
-          </button>
-        </div>
+
         <div class="dock-progress">
           <span id="tcur">0:00</span>
           <div class="seek-wrap">
@@ -230,7 +208,29 @@
         <button id="dockMenuBtn" class="iconBtn" type="button" aria-label="打开队列面板">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.25h16v1.5H4v-1.5Zm0 5h16v1.5H4v-1.5Zm0 5h10v1.5H4v-1.5Z" fill="currentColor"/></svg>
         </button>
-      </div>
+      </div>      <div class="dock-controls">
+          <button id="shuffleMain" class="iconBtn" type="button" aria-label="随机播放">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-1.5V5.56l-4.06 4.06-1.06-1.06L18.44 4.5H16V3ZM4 7h2.7c1.13 0 2.2.45 3 1.24l1.82 1.82-1.06 1.06-1.82-1.82A2.74 2.74 0 0 0 6.7 8.5H4V7Zm10.38 5.56 1.06 1.06-4.88 4.88A4.22 4.22 0 0 1 7.56 20H4v-1.5h3.56c.72 0 1.4-.28 1.91-.79l4.91-4.91ZM18.44 19.5l-4.06-4.06 1.06-1.06 4.06 4.06V16H21v5h-5v-1.5h2.44ZM4 15.5v-1.5h2.7c.54 0 1.06-.16 1.5-.47l1.4 1.08c-.83.57-1.79.89-2.9.89H4Z" fill="currentColor"/></svg>
+          </button>
+          <button id="shuffle" class="iconBtn ghost-compat" type="button" aria-label="随机播放（兼容）">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-1.5V5.56l-4.06 4.06-1.06-1.06L18.44 4.5H16V3ZM4 7h2.7c1.13 0 2.2.45 3 1.24l1.82 1.82-1.06 1.06-1.82-1.82A2.74 2.74 0 0 0 6.7 8.5H4V7Zm10.38 5.56 1.06 1.06-4.88 4.88A4.22 4.22 0 0 1 7.56 20H4v-1.5h3.56c.72 0 1.4-.28 1.91-.79l4.91-4.91ZM18.44 19.5l-4.06-4.06 1.06-1.06 4.06 4.06V16H21v5h-5v-1.5h2.44ZM4 15.5v-1.5h2.7c.54 0 1.06-.16 1.5-.47l1.4 1.08c-.83.57-1.79.89-2.9.89H4Z" fill="currentColor"/></svg>
+          </button>
+          <button id="prev" class="iconBtn" type="button" aria-label="上一首">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h1.5v14H6V5Zm11.5 1.7v10.6c0 .63-.7 1.01-1.24.68l-7.52-5.3a.82.82 0 0 1 0-1.36l7.52-5.3c.54-.33 1.24.05 1.24.68Z" fill="currentColor"/></svg>
+          </button>
+          <button id="play" class="iconBtn primary play-btn" type="button" aria-label="播放或暂停">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72c0 .78.87 1.26 1.54.84l10.79-6.86c.62-.39.62-1.29 0-1.68L9.54 4.3C8.87 3.88 8 4.36 8 5.14Z" fill="currentColor"/></svg>
+          </button>
+          <button id="next" class="iconBtn" type="button" aria-label="下一首">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 5H18v14h-1.5V5ZM6.5 6.7v10.6c0 .63.7 1.01 1.24.68l7.52-5.3a.82.82 0 0 0 0-1.36l-7.52-5.3c-.54-.33-1.24.05-1.24.68Z" fill="currentColor"/></svg>
+          </button>
+          <button id="repeatMain" class="iconBtn" type="button" aria-label="循环">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6.5h-9a2.5 2.5 0 0 0-2.5 2.5v1H3.5V9A4 4 0 0 1 7.5 5h9V2.75L21 6.5l-4.5 3.75V6.5Zm-9 11h9a2.5 2.5 0 0 0 2.5-2.5v-1h1.5v1a4 4 0 0 1-4 4h-9v2.25L3 17.5l4.5-3.75V17.5Z" fill="currentColor"/></svg>
+          </button>
+          <button id="repeat" class="iconBtn ghost-compat" type="button" aria-label="循环（兼容）">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6.5h-9a2.5 2.5 0 0 0-2.5 2.5v1H3.5V9A4 4 0 0 1 7.5 5h9V2.75L21 6.5l-4.5 3.75V6.5Zm-9 11h9a2.5 2.5 0 0 0 2.5-2.5v-1h1.5v1a4 4 0 0 1-4 4h-9v2.25L3 17.5l4.5-3.75V17.5Z" fill="currentColor"/></svg>
+          </button>
+        </div>
     </footer>
 
     <div id="downloadMenu" class="downloadMenu hidden" aria-hidden="true">
@@ -300,15 +300,15 @@
     <audio id="audio"></audio>
   </div>
 
-  <script src="/app/demo.js?v=2.13.0"></script>
-  <script src="/app/core.js?v=2.13.0"></script>
-  <script src="/app/accounts.js?v=2.13.0"></script>
-  <script src="/app/queue.js?v=2.13.0"></script>
-  <script src="/app/playlists.js?v=2.13.0"></script>
-  <script src="/app/api.js?v=2.13.0"></script>
-  <script src="/app/discover.js?v=2.13.0"></script>
-  <script src="/app/player.js?v=2.13.0"></script>
-  <script src="/app/app.js?v=2.13.0"></script>
+  <script src="/app/demo.js?v=2.14.0"></script>
+  <script src="/app/core.js?v=2.14.0"></script>
+  <script src="/app/accounts.js?v=2.14.0"></script>
+  <script src="/app/queue.js?v=2.14.0"></script>
+  <script src="/app/playlists.js?v=2.14.0"></script>
+  <script src="/app/api.js?v=2.14.0"></script>
+  <script src="/app/discover.js?v=2.14.0"></script>
+  <script src="/app/player.js?v=2.14.0"></script>
+  <script src="/app/app.js?v=2.14.0"></script>
 
   <script>
   document.addEventListener('DOMContentLoaded', function(){
