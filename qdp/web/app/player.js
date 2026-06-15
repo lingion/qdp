@@ -236,7 +236,8 @@ async function swapCurrentTrackQuality(fmt, options = {}){
   try{
     const stream = await getTrackStream(currentTrack.id, fmt);
     if(seq !== state.playRequestSeq || state.idx < 0 || normTrack(state.queue[state.idx])?.id !== currentTrack.id) return false;
-    if(previousSrc === stream.url){
+    const playbackUrl = pickPlaybackUrl(stream, currentTrack.id, fmt, true);
+    if(previousSrc === playbackUrl){
       hideQualitySwitchFeedback();
       setPlayerStatus(wasPaused ? 'paused' : 'playing', currentTrackLabel(currentTrack, fmt), {
         activeTrack: currentTrack,
@@ -249,7 +250,7 @@ async function swapCurrentTrackQuality(fmt, options = {}){
     audio.dataset.playSeq = String(seq);
     audio.dataset.fmt = String(fmt);
     try{ audio.volume = wasPaused ? restoreVolume : Math.max(0.18, restoreVolume * 0.45); }catch(_e){}
-    audio.src = stream.url;
+    audio.src = playbackUrl;
     setAudioEventGate('pause');
     audio.load();
     await new Promise((resolve, reject)=>{
@@ -326,6 +327,12 @@ async function swapCurrentTrackQuality(fmt, options = {}){
   }
   }finally{ state.navLock = false; }
 }
+function pickPlaybackUrl(stream, trackId, fmt, preferCached = false){
+  const cachedUrl = stream?.cached_url || getCachedTrackUrl(trackId, fmt);
+  if(preferCached && stream?.cacheReady && cachedUrl) return cachedUrl;
+  return stream?.url || cachedUrl || '';
+}
+
 async function playCurrent(reason = ''){
   _endedGeneration++;
   const currentIdx = state.idx;
@@ -385,14 +392,16 @@ async function playCurrent(reason = ''){
     ]);
     if(seq !== state.playRequestSeq || currentIdx !== state.idx) return false;
 
+    const playbackUrl = pickPlaybackUrl(stream, meta.id, fmt, true);
+    if(!playbackUrl) throw new Error('Server returned empty playback URL');
     audio.dataset.playSeq = String(seq);
     audio.dataset.fmt = String(fmt);
-    if(audio.src !== stream.url){
-      audio.src = stream.url;
+    if(audio.src !== playbackUrl){
+      audio.src = playbackUrl;
     }else{
       // Force reload even with same URL (retry after error)
       audio.src = '';
-      audio.src = stream.url;
+      audio.src = playbackUrl;
     }
     applyVolumeToAudio();
     setAudioEventGate('play');
@@ -925,7 +934,8 @@ function bindPlayer(){
           }
           const stream = await getTrackStream(currentTrack.id, fmt);
           if(recoverySeq !== state.playRequestSeq){ _midPlaybackRetrying = false; return; }
-          audio.src = stream.url;
+          const playbackUrl = pickPlaybackUrl(stream, currentTrack.id, fmt, true);
+          audio.src = playbackUrl;
           audio.load();
           await new Promise((resolve, reject)=>{
             const timeout = setTimeout(()=>{

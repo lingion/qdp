@@ -345,14 +345,20 @@ async function getTrackStream(trackId, fmt = currentQuality()){
   const cached = getCachedMapValue(state.streamCache, cacheKey);
   if(cached?.url){
     const age = streamCacheAge(cacheKey);
-    if(age < STREAM_STALE_MS) return cached;
-    console.debug(`[stream-cache] stale (${Math.round(age / 1000)}s), refreshing`, cacheKey);
+    if(!cached.cacheReady){
+      try{ cached.cacheReady = await checkCachedTrack(trackId, fmt); }catch(_e){ cached.cacheReady = false; }
+      setCachedMapValue(state.streamCache, STREAM_CACHE_KEY, cacheKey, cached);
+    }
+    if(cached.cacheReady && age < STREAM_STALE_MS) return cached;
+    if(age < STREAM_STALE_MS && !cached.cached_url) return cached;
+    console.debug(`[stream-cache] stale (${Math.round(age / 1000)}s) or cache not primed, refreshing`, cacheKey);
   }
   if(_pendingStreams.has(cacheKey)) return _pendingStreams.get(cacheKey);
-  const promise = api(`/api/track-url?id=${encodeURIComponent(trackId)}&fmt=${encodeURIComponent(fmt)}`).then((data)=>{
+  const promise = api(`/api/track-url?id=${encodeURIComponent(trackId)}&fmt=${encodeURIComponent(fmt)}`).then(async (data)=>{
     _pendingStreams.delete(cacheKey);
     if(acctSeq !== (state.streamAccountSeq || 0)) return null;
     if(!data?.url) throw new Error('Server returned empty stream URL');
+    try{ data.cacheReady = await checkCachedTrack(trackId, fmt); }catch(_e){ data.cacheReady = false; }
     setCachedMapValue(state.streamCache, STREAM_CACHE_KEY, cacheKey, data);
     return data;
   }).catch((err)=>{
