@@ -204,6 +204,17 @@ function syncMobileTopbarTitle(){
   if(titleEl && h1) titleEl.textContent = h1.textContent.trim() || '发现';
 }
 
+// Auto-sync mobile topbar whenever #contentTitle text changes (e.g. search results, discover)
+(function(){
+  const ct = $('contentTitle');
+  if(ct){
+    new MutationObserver(() => {
+      const mt = $('mobileTopbarTitle');
+      if(mt) mt.textContent = ct.textContent.trim() || '发现';
+    }).observe(ct, { childList: true, subtree: true });
+  }
+})();
+
 function syncQueueBadge(){
   const badge = $('queueCountBadge');
   if(!badge) return;
