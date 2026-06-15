@@ -1201,7 +1201,11 @@ function setView(renderer){
   if(mobileMenu) mobileMenu.classList.toggle('hidden', onDetail);
   if(mobileQueue) mobileQueue.classList.toggle('hidden', onDetail);
   const topbarTitle = $('mobileTopbarTitle');
-  if(topbarTitle) topbarTitle.textContent = onDetail ? '' : '发现';
+  if(topbarTitle){
+    // Don't overwrite search results title ('搜索结果') when rendering list views
+    const current = topbarTitle.textContent;
+    topbarTitle.textContent = (onDetail ? '' : (current === '搜索结果' ? '搜索结果' : '发现'));
+  }
 }
 function pushView(renderer){
   if(state.currentView) state.history.push(state.currentView);
