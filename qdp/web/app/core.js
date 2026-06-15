@@ -430,6 +430,7 @@ const state = {
   muted: localStorage.getItem(MUTED_KEY) === '1',
   volumePopoverOpen: false,
   sidebarSections: { queue: true, playlists: false },
+  activeSidePanel: null,
   lastNonZeroVolume: (()=>{ const v = clampVolume(localStorage.getItem(LAST_NONZERO_VOLUME_KEY)); return (v > 0) ? v : 1; })(),
   queue: [],
   idx: -1,
@@ -791,6 +792,21 @@ function syncSidebarSections(){
     }
     if(body) body.classList.toggle('collapsed', !expanded);
   });
+  // Separate panels: show/hide based on activeSidePanel
+  const queueCard = document.querySelector('.sideCard:nth-child(1)');
+  const playlistsCard = document.querySelector('.sideCard:nth-child(2)');
+  if(state.activeSidePanel === 'queue'){
+    if(queueCard) queueCard.style.display = '';
+    if(playlistsCard) playlistsCard.style.display = 'none';
+    state.sidebarSections.queue = true;
+  } else if(state.activeSidePanel === 'playlists'){
+    if(queueCard) queueCard.style.display = 'none';
+    if(playlistsCard) playlistsCard.style.display = '';
+    state.sidebarSections.playlists = true;
+  } else {
+    if(queueCard) queueCard.style.display = '';
+    if(playlistsCard) playlistsCard.style.display = '';
+  }
   // Mobile UI side-effects
   if(typeof syncQueueBadge === 'function') syncQueueBadge();
   if(typeof syncMobileTopbarTitle === 'function') syncMobileTopbarTitle();

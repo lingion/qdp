@@ -185,8 +185,8 @@ This area is mainly aligned with Kerry's contribution scope: web UI, browser int
 
 ## Webapp Demo
 
-- Live demo: https://b2ab7e62.qdp-webapp-demo.pages.dev
-- Deployment URL: https://b2ab7e62.qdp-webapp-demo.pages.dev
+- Live demo: https://3d970eb7.qdp-webapp-demo.pages.dev/app/
+- Deployment URL: https://3d970eb7.qdp-webapp-demo.pages.dev/app/
 - Latest UI: v2.13.0 (refresh-safe app routes, mobile search chips, search history, artist-page multi-breakpoint cleanup)
 - Last refreshed: 2026-06-15
 - Demo mode: **Static mock demo on Pages** (UI/interaction showcase; not backed by a live qdp Python runtime)
