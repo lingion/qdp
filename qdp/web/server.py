@@ -1613,8 +1613,9 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                         filename = f"track_{tid}{_download_extension_for_fmt(fmt)}"
                     os.makedirs(dl_path, exist_ok=True)
                     save_path = os.path.join(dl_path, filename)
-                    proxies = get_active_proxy()
-                    resp = requests.get(raw_url, stream=True, timeout=300, proxies=proxies if proxies else None)
+                    proxy_str = get_active_proxy()
+                    req_proxies = {"http": proxy_str, "https": proxy_str} if proxy_str else None
+                    resp = requests.get(raw_url, stream=True, timeout=300, proxies=req_proxies)
                     resp.raise_for_status()
                     with open(save_path, "wb") as f:
                         for chunk in resp.iter_content(8192):
@@ -1629,7 +1630,8 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                     album_name = _sanitize_download_filename((album_meta or {}).get("title") or f"album_{tid}")
                     album_dir = os.path.join(dl_path, album_name)
                     os.makedirs(album_dir, exist_ok=True)
-                    proxies = get_active_proxy()
+                    proxy_str = get_active_proxy()
+                    req_proxies = {"http": proxy_str, "https": proxy_str} if proxy_str else None
                     for i, trk in enumerate(tracks):
                         trk_id = trk.get("id")
                         if not trk_id:
@@ -1645,7 +1647,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                             except Exception:
                                 trk_filename = f"{i+1:02d} - track_{trk_id}{_download_extension_for_fmt(fmt)}"
                             trk_save = os.path.join(album_dir, trk_filename)
-                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=proxies if proxies else None)
+                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=req_proxies)
                             r.raise_for_status()
                             with open(trk_save, "wb") as f:
                                 for chunk in r.iter_content(8192):
@@ -1669,7 +1671,8 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                         return
                     pl_dir = os.path.join(dl_path, f"playlist_{tid}")
                     os.makedirs(pl_dir, exist_ok=True)
-                    proxies = get_active_proxy()
+                    proxy_str = get_active_proxy()
+                    req_proxies = {"http": proxy_str, "https": proxy_str} if proxy_str else None
                     for i, trk_id in enumerate(track_ids):
                         try:
                             trk_url_info = client.get_track_url(str(trk_id), fmt)
@@ -1682,7 +1685,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                             except Exception:
                                 trk_filename = f"{i+1:02d} - track_{trk_id}{_download_extension_for_fmt(fmt)}"
                             trk_save = os.path.join(pl_dir, trk_filename)
-                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=proxies if proxies else None)
+                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=req_proxies)
                             r.raise_for_status()
                             with open(trk_save, "wb") as f:
                                 for chunk in r.iter_content(8192):
@@ -1695,6 +1698,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             except requests.exceptions.RequestException as exc:
                 self._send_api_error(502, "download_failed", str(exc)[:200])
             except Exception as exc:
+                logger.exception("download-tagged error: %s", exc)
                 self._send_api_error(500, "download_error", str(exc)[:200])
             return
 
