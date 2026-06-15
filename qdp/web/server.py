@@ -223,6 +223,13 @@ def _normalize_track(item: dict, image_fallback: str = "") -> dict:
     return payload
 
 
+def _parse_int_safe(val, default: int = 0) -> int:
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
 def _sanitize_download_filename(name: str, fallback: str = "track") -> str:
     raw = str(name or "").strip()
     cleaned = re.sub(r"[\\/:*?\"<>|]+", " ", raw)
@@ -1564,6 +1571,123 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                 "default_path": os.path.expanduser("~/Music/qdp"),
                 "workers": 3
             })
+            return
+
+        if path == "/api/download-tagged":
+            if method != "POST":
+                self._send_api_error(405, "method_not_allowed", "POST required")
+                return
+            self._send_api_success_async = False
+            try:
+                body_len = int(self.headers.get("Content-Length", 0))
+                post_data = json.loads(self.rfile.read(body_len)) if body_len else {}
+            except (ValueError, JSONDecodeError):
+                post_data = {}
+            tid = str((post_data.get("id")) or (qs.get("id") or [""])[0]).strip()
+            if not tid:
+                self._send_api_error(400, "missing_id", "missing track id")
+                return
+            dl_type = str(post_data.get("type") or (qs.get("type") or [""])[0] or "track").strip().lower()
+            fmt = _parse_int_safe(post_data.get("fmt") or (qs.get("fmt") or [""])[0], 5)
+            if fmt < 5:
+                fmt = 5
+            dl_path = str(post_data.get("path") or (qs.get("path") or [""])[0] or os.path.expanduser("~/Music/qdp")).strip()
+            embed = str(post_data.get("embed") or (qs.get("embed") or [""])[0] or "1").strip()
+            workers = _parse_int_safe(post_data.get("workers") or (qs.get("workers") or [""])[0], 3)
+
+            # Extend timeout
+            self.timeout = 600
+
+            try:
+                if dl_type == "track":
+                    u = client.get_track_url(tid, fmt)
+                    raw_url = (u or {}).get("url")
+                    if not raw_url:
+                        self._send_api_error(502, "missing_upstream_url", "missing url")
+                        return
+                    try:
+                        track_meta = client.get_track_meta(tid)
+                        filename = _download_filename_for_track(track_meta, fmt)
+                    except Exception:
+                        filename = f"track_{tid}{_download_extension_for_fmt(fmt)}"
+                    os.makedirs(dl_path, exist_ok=True)
+                    save_path = os.path.join(dl_path, filename)
+                    proxies = get_active_proxy()
+                    resp = requests.get(raw_url, stream=True, timeout=300, proxies=proxies if proxies else None)
+                    resp.raise_for_status()
+                    with open(save_path, "wb") as f:
+                        for chunk in resp.iter_content(8192):
+                            f.write(chunk)
+                    self._send_api_success({"path": save_path, "filename": filename})
+                elif dl_type == "album":
+                    tracks = client.get_album_tracks(tid)
+                    if not tracks:
+                        self._send_api_error(404, "album_empty", "album has no tracks")
+                        return
+                    album_meta = client.get_album_meta(tid)
+                    album_name = _sanitize_download_filename((album_meta or {}).get("title") or f"album_{tid}")
+                    album_dir = os.path.join(dl_path, album_name)
+                    os.makedirs(album_dir, exist_ok=True)
+                    proxies = get_active_proxy()
+                    for i, trk in enumerate(tracks):
+                        trk_id = trk.get("id")
+                        if not trk_id:
+                            continue
+                        try:
+                            trk_url_info = client.get_track_url(str(trk_id), fmt)
+                            trk_raw_url = (trk_url_info or {}).get("url")
+                            if not trk_raw_url:
+                                continue
+                            try:
+                                trk_meta = client.get_track_meta(str(trk_id))
+                                trk_filename = f"{i+1:02d} - {_download_filename_for_track(trk_meta, fmt)}"
+                            except Exception:
+                                trk_filename = f"{i+1:02d} - track_{trk_id}{_download_extension_for_fmt(fmt)}"
+                            trk_save = os.path.join(album_dir, trk_filename)
+                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=proxies if proxies else None)
+                            r.raise_for_status()
+                            with open(trk_save, "wb") as f:
+                                for chunk in r.iter_content(8192):
+                                    f.write(chunk)
+                        except Exception as e:
+                            logger.warning("Failed to download album track %s: %s", trk_id, e)
+                    self._send_api_success({"path": album_dir, "filename": album_name})
+                elif dl_type == "playlist":
+                    track_ids = post_data.get("tracks") or post_data.get("tracks_ids") or []
+                    if not isinstance(track_ids, list):
+                        track_ids = []
+                    if not track_ids:
+                        self._send_api_error(400, "missing_tracks", "no track ids provided for playlist download")
+                        return
+                    pl_dir = os.path.join(dl_path, f"playlist_{tid}")
+                    os.makedirs(pl_dir, exist_ok=True)
+                    proxies = get_active_proxy()
+                    for i, trk_id in enumerate(track_ids):
+                        try:
+                            trk_url_info = client.get_track_url(str(trk_id), fmt)
+                            trk_raw_url = (trk_url_info or {}).get("url")
+                            if not trk_raw_url:
+                                continue
+                            try:
+                                trk_meta = client.get_track_meta(str(trk_id))
+                                trk_filename = f"{i+1:02d} - {_download_filename_for_track(trk_meta, fmt)}"
+                            except Exception:
+                                trk_filename = f"{i+1:02d} - track_{trk_id}{_download_extension_for_fmt(fmt)}"
+                            trk_save = os.path.join(pl_dir, trk_filename)
+                            r = requests.get(trk_raw_url, stream=True, timeout=300, proxies=proxies if proxies else None)
+                            r.raise_for_status()
+                            with open(trk_save, "wb") as f:
+                                for chunk in r.iter_content(8192):
+                                    f.write(chunk)
+                        except Exception as e:
+                            logger.warning("Failed to download playlist track %s: %s", trk_id, e)
+                    self._send_api_success({"path": pl_dir})
+                else:
+                    self._send_api_error(400, "invalid_type", f"unsupported type: {dl_type}")
+            except requests.exceptions.RequestException as exc:
+                self._send_api_error(502, "download_failed", str(exc)[:200])
+            except Exception as exc:
+                self._send_api_error(500, "download_error", str(exc)[:200])
             return
 
         self._send_api_error(404, "not_found", "not found")
