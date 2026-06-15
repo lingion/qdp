@@ -696,7 +696,8 @@ function bindUI(){
     }
     // Close sidebar on outside click (desktop)
     const sidebar = $('sidebar');
-    if(sidebar && sidebar.classList.contains('open') && !isMobileLayout()){
+    const sidebarNav = e.target.closest('.sidebar-nav');
+    if(sidebar && sidebar.classList.contains('open') && !isMobileLayout() && !sidebarNav){
       const dockMenuBtn = $('dockMenuBtn');
       if(!sidebar.contains(e.target) && e.target !== dockMenuBtn && !(dockMenuBtn && dockMenuBtn.contains(e.target))){
         sidebar.classList.remove('open');
