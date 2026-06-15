@@ -795,6 +795,10 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             self._handle_app_api(parsed)
             return
 
+        if path == "/api/download-tagged":
+            self._handle_app_api(parsed)
+            return
+
         if path.startswith("/api.json/0.2/"):
             self._handle_qobuz_api_proxy(parsed, method="POST")
             return
@@ -1574,9 +1578,6 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/download-tagged":
-            if method != "POST":
-                self._send_api_error(405, "method_not_allowed", "POST required")
-                return
             self._send_api_success_async = False
             try:
                 body_len = int(self.headers.get("Content-Length", 0))
@@ -1653,9 +1654,16 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                             logger.warning("Failed to download album track %s: %s", trk_id, e)
                     self._send_api_success({"path": album_dir, "filename": album_name})
                 elif dl_type == "playlist":
-                    track_ids = post_data.get("tracks") or post_data.get("tracks_ids") or []
-                    if not isinstance(track_ids, list):
-                        track_ids = []
+                    raw_tracks = post_data.get("tracks") or post_data.get("tracks_ids") or []
+                    if not isinstance(raw_tracks, list):
+                        raw_tracks = []
+                    # Frontend sends track objects [{id:..., title:...}, ...]; extract ids
+                    track_ids = []
+                    for t in raw_tracks:
+                        if isinstance(t, dict) and t.get("id"):
+                            track_ids.append(str(t["id"]))
+                        elif isinstance(t, (int, float, str)):
+                            track_ids.append(str(t))
                     if not track_ids:
                         self._send_api_error(400, "missing_tracks", "no track ids provided for playlist download")
                         return
