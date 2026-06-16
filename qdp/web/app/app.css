@@ -1778,10 +1778,110 @@ img {
   /* Mobile topbar (visible only ≤ 980px) */
   .mobile-search-area {
     display: block;
+    padding: 8px 12px 12px;
+  }
+
+  .mobile-search-shell {
+    height: 38px;
+    border-radius: 999px;
+    background: var(--bg-shell, #2A2A2A);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    color: var(--text-secondary);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  }
+
+  .mobile-search-shell .search-glyph {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+  }
+
+  .mobile-search-shell #mobileQ {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.2;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* Hide native webkit search clear button (we use our own) */
+  .mobile-search-shell #mobileQ::-webkit-search-cancel-button,
+  .mobile-search-shell #mobileQ::-webkit-search-decoration,
+  .mobile-search-shell #mobileQ::-webkit-search-results-button,
+  .mobile-search-shell #mobileQ::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+    display: none;
+  }
+
+  .mobile-search-shell #mobileQ::placeholder {
+    color: var(--text-secondary);
+    opacity: 1;
+  }
+
+  .mobile-search-shell .searchClearBtn {
+    flex: 0 0 auto;
+    background: rgba(255, 255, 255, 0.08);
+    border: 0;
+    color: var(--text-secondary);
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-search-shell .searchClearBtn:active {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .mobile-search-shell .searchClearBtn svg {
+    width: 14px;
+    height: 14px;
   }
 
   .mobile-search-type-tabs {
     display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 0 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .mobile-search-type-tabs::-webkit-scrollbar { display: none; }
+
+  .mobile-search-type-tabs .tab.mobile-tab {
+    flex: 0 0 auto;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    border: 0;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-search-type-tabs .tab.mobile-tab.active {
+    background: var(--accent, #fc3c44);
+    color: #fff;
   }
 
   .mobile-topbar {
