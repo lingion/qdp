@@ -89,7 +89,10 @@ async function openAlbum(id, options = {}){
     }
     renderTrackList(a?.title || 'Album', a?.artist || '', a?.image || (tracks[0]||{}).image, tracks, { sourceType: 'album', sourceChip: 'Album', sourceLabel: `来自 Album · ${a?.title || 'Album'}`, audioSpecSource: a, decorate: (root)=>{
       const actions = root.querySelector('.detailActions');
-      actions.appendChild(makeAlbumDownloadLink(a, 'Download album'));
+      if(actions){
+        actions.appendChild(makeIconButton('play', 'playAlbumNow', 'Play album', a.id));
+        actions.appendChild(makeAlbumDownloadLink(a, 'Download album'));
+      }
     } });
     state.currentView = () => openAlbum(id, { preserveHistory: true, skipRoute: true });
     syncMobileTopbar();
@@ -138,15 +141,31 @@ async function fetchArtist(id){
 }
 async function collectArtistTracks(artist){
   if(artist.allTracks && artist.allTracks.length) return artist.allTracks;
+  const albums = Array.isArray(artist?.albums) ? artist.albums : [];
+  // Cap how many albums we expand at once to keep the first paint snappy.
+  // For very prolific artists (e.g. 200+ albums) we still want quick results, so we
+  // fan out album fetches in parallel and take the first batch that yields tracks.
+  const MAX_PARALLEL = 8;
+  const MAX_TRACKS = 250;
   const merged = [];
-  for(const al of (artist.albums || [])){
-    try{
-      const full = await fetchAlbum(al.id);
-      merged.push(...(full?.tracks || []).map(normTrack).filter(Boolean));
-    }catch(_e){}
+  for(let i = 0; i < albums.length && merged.length < MAX_TRACKS; i += MAX_PARALLEL){
+    const batch = albums.slice(i, i + MAX_PARALLEL);
+    const results = await Promise.allSettled(batch.map(al => fetchAlbum(al.id).catch(()=>null)));
+    for(const r of results){
+      if(r.status === 'fulfilled' && r.value?.tracks){
+        for(const t of r.value.tracks){
+          const nt = normTrack(t);
+          if(nt && nt.id && String(nt.id) !== 'undefined' && String(nt.id) !== 'null'){
+            merged.push(nt);
+            if(merged.length >= MAX_TRACKS) break;
+          }
+        }
+      }
+      if(merged.length >= MAX_TRACKS) break;
+    }
   }
   artist.allTracks = merged;
-  setCachedMapValue(state.artistCache, ARTIST_CACHE_KEY, artist.id, artist);
+  if(artist.id) setCachedMapValue(state.artistCache, ARTIST_CACHE_KEY, artist.id, artist);
   return merged;
 }
 async function openArtist(id, options = {}){
@@ -255,28 +274,39 @@ async function openArtist(id, options = {}){
 }
 // ═══ Track Stream ═══
 
-async function playTrackNow(track){
-  // Warm up the audio element while we're still in a user-gesture context
+// Warm up the audio element while we're still in a user-gesture context.
+// Race audio.play() with a short timeout so the warm-up never hangs the click handler
+// (headless browsers, muted tabs, or pending decoded streams can leave the Promise pending).
+async function _warmUpAudioGate(){
   const audio = $('audio');
-  if(audio){
-    setAudioEventGate('play');
-    try{ await audio.play(); }catch(_e){}
-    setAudioEventGate('pause');
-    audio.pause();
-  }
+  if(!audio) return;
+  setAudioEventGate('play');
+  try{
+    const playPromise = audio.play();
+    if(playPromise && playPromise.then){
+      await Promise.race([
+        playPromise.catch(()=>null),
+        new Promise(r => setTimeout(r, 250)),
+      ]);
+    }
+  }catch(_e){}
+  setAudioEventGate('pause');
+  audio.pause();
+}
+
+async function playTrackNow(track){
+  await _warmUpAudioGate();
   const t = typeof track === 'object' ? normTrack(track) : { id: track };
+  if(!t || !t.id || String(t.id) === 'undefined' || String(t.id) === 'null'){
+    console.warn('[playTrackNow] invalid track id, skipping', t);
+    return false;
+  }
   queueFromTracks([t], 0, { sourceType: 'single-track', sourceLabel: '单曲队列' });
   await playCurrent('play-now');
+  return true;
 }
 async function playAlbumNow(albumId){
-  // Warm up the audio element while we're still in a user-gesture context
-  const audio = $('audio');
-  if(audio){
-    setAudioEventGate('play');
-    try{ await audio.play(); }catch(_e){}
-    setAudioEventGate('pause');
-    audio.pause();
-  }
+  await _warmUpAudioGate();
   try{
     const a = await fetchAlbum(albumId);
     const tracks = (a?.tracks || []).map(normTrack).filter(Boolean);
@@ -291,14 +321,7 @@ async function playAlbumNow(albumId){
   }
 }
 async function playPlaylistNow(playlistId){
-  // Warm up the audio element while we're still in a user-gesture context
-  const audio = $('audio');
-  if(audio){
-    setAudioEventGate('play');
-    try{ await audio.play(); }catch(_e){}
-    setAudioEventGate('pause');
-    audio.pause();
-  }
+  await _warmUpAudioGate();
   try{
     const p = await api(`/api/playlist?id=${encodeURIComponent(playlistId)}`);
     const tracks = (p?.tracks || []).map(normTrack).filter(Boolean);
@@ -313,15 +336,14 @@ async function playPlaylistNow(playlistId){
   }
 }
 async function playArtistNow(artist){
-  // Warm up the audio element while we're still in a user-gesture context
-  const audio = $('audio');
-  if(audio){
-    setAudioEventGate('play');
-    try{ await audio.play(); }catch(_e){}
-    setAudioEventGate('pause');
-    audio.pause();
-  }
+  await _warmUpAudioGate();
   try{
+    // Search results carry only {id, name, image, albums_count}. We need the full artist
+    // payload (with `albums[]`) before we can collect tracks. Fetch on demand.
+    if(!artist || !artist.albums){
+      const full = await fetchArtist(artist?.id);
+      if(full) artist = full;
+    }
     const tracks = await collectArtistTracks(artist);
     if(!tracks.length){ showToast('该艺术家没有可播放的曲目', 'warning'); return; }
     queueFromTracks(tracks, 0, {
