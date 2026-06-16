@@ -1344,6 +1344,131 @@ img {
   align-items: center;
 }
 
+/* ─── Sidebar: Download Tasks ─── */
+.downloadItem {
+  position: relative;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  overflow: hidden;
+}
+.downloadItem .downloadTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text, #f3f3f3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.downloadItem .downloadStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted, #aaa);
+}
+.downloadItem.is-running .downloadStatusBadge {
+  background: var(--accent, #ff2d55);
+  color: #fff;
+}
+.downloadItem.is-done .downloadStatusBadge {
+  background: rgba(70, 200, 120, 0.85);
+  color: #fff;
+}
+.downloadItem.is-error .downloadStatusBadge {
+  background: rgba(255, 80, 80, 0.85);
+  color: #fff;
+}
+.downloadItem .downloadMeta {
+  color: var(--muted, #aaa);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.downloadItem .downloadProgressTrack {
+  position: relative;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.downloadItem .downloadProgressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: var(--accent, #ff2d55);
+  border-radius: 2px;
+  transition: width 240ms ease;
+}
+.downloadItem.is-done .downloadProgressFill {
+  background: rgba(70, 200, 120, 0.9);
+}
+.downloadItem.is-error .downloadProgressFill {
+  background: rgba(255, 80, 80, 0.85);
+}
+.downloadItem .downloadErrorMsg {
+  color: rgba(255, 110, 110, 0.95);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.downloadItem.is-done,
+.downloadItem.is-error {
+  opacity: 0.85;
+}
+.downloadItem .downloadRemoveBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--muted, #aaa);
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.downloadItem:hover .downloadRemoveBtn {
+  opacity: 1;
+}
+.downloadItem .downloadRemoveBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #fff);
+}
+.downloadItem .downloadTitleText {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#downloadsBadge {
+  background: var(--accent, #ff2d55);
+  color: #fff;
+  font-weight: 700;
+}
+
 .player-dock {
   grid-area: dock;
   display: grid;
