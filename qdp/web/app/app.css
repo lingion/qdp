@@ -2101,114 +2101,21 @@ img {
   }
 }
 
-/* ═══ Small phone (≤ 720px) — compact dock + single-column results ═══ */
+/* ═══ Small phone (≤ 720px) — Apple-Music-style compact dock ═══ */
 @media (max-width: 720px) {
-  .mobile-topbar {
-    padding: 8px 10px 8px;
-  }
-
-  .mobile-topbar .iconBtn {
-    width: 38px;
-    height: 38px;
-  }
-
-  .mobile-topbar .iconBtn.hidden {
-    display: none !important;
-  }
-
-  .main-content {
-    padding: 12px 12px calc(var(--dock-height) + env(safe-area-inset-bottom, 0px) + 14px);
-  }
-
-  .search-type-tabs {
-    gap: 6px;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    width: 100%;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-  }
-
-  .mobile-search-area {
-    display: block;
-    margin-bottom: 10px;
-  }
-
-  .mobile-search-shell {
-    height: 36px;
-    border-radius: 999px;
-    background: #2A2A2A;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 14px;
-    color: var(--text-secondary);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
-  }
-
-  .mobile-search-shell #mobileQ {
-    flex: 1 1 auto;
-    min-width: 0;
-    height: 100%;
-    background: transparent;
-    border: 0;
-    color: var(--text);
-    font-size: 14px;
-    appearance: none;
-    -webkit-appearance: none;
-    outline: none;
-  }
-
-  .mobile-search-shell #mobileQ::placeholder {
-    color: var(--text-secondary);
-  }
-
-  .content-header .search-type-tabs {
-    display: none;
-  }
-
-  .search-wrap {
-    padding: 0;
-  }
-
-  .search-shell {
-    height: 34px;
-  }
-
-  .mobile-search-type-tabs {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    overflow-x: auto;
-    padding: 8px 2px 0;
-    scrollbar-width: none;
-  }
-
-  .mobile-search-type-tabs.hidden {
-    display: none;
-  }
-
-  .mobile-search-type-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .mobile-tab {
-    flex: 0 0 auto;
-    min-height: 28px;
-    padding: 0 12px;
-    font-size: 12px;
-  }
-
   .player-dock {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
+    /* Row 1: progress bar (16px), Row 2: cover+meta+controls (48px) */
+    grid-template-columns: 1fr auto auto;
+    grid-template-rows: 12px 44px;
     height: auto;
     min-height: 0;
-    padding: 4px 10px 6px;
-    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
-    gap: 2px;
-    background: linear-gradient(180deg, rgba(20,20,20,0.95), rgba(13,13,13,0.98));
-    backdrop-filter: saturate(160%) blur(14px);
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    gap: 0;
+    background: rgba(20,20,22,0.96);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 0.5px solid rgba(255,255,255,0.08);
   }
 
   .player-dock::before {
@@ -2216,68 +2123,105 @@ img {
     display: none;
   }
 
-  /* Row 1: progress + times */
+  /* Row 1: progress bar — 16px sticky on top, prominent */
   .dock-center {
+    grid-column: 1 / -1;
+    grid-row: 1;
     width: 100%;
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     gap: 0;
-    order: 1;
+    order: 0;
     min-height: 0;
+    padding: 0 10px;
+    background: transparent;
   }
 
   .dock-progress {
-    order: 1;
     width: 100%;
     display: flex;
     align-items: center;
     gap: 8px;
-  }
-
-  .dock-progress {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    flex: 0 0 auto;
+    height: 100%;
   }
 
   .dock-progress #tcur,
   .dock-progress #tdur {
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-secondary);
-    min-width: 24px;
+    min-width: 28px;
     text-align: center;
     font-variant-numeric: tabular-nums;
+    font-weight: 500;
   }
 
   .seek-track {
-    height: 2px;
+    position: relative;
+    height: 3px;
     flex: 1;
+    border-radius: 0;
+    background: rgba(255,255,255,0.22);
+    overflow: hidden;
+  }
+
+  .seek-track .progressFill {
+    background: var(--accent, #fc3c44);
+    height: 100%;
+    border-radius: 0;
+    transition: none;
   }
 
   .seek-wrap input[type="range"] {
     height: 12px;
+    margin: 0;
   }
 
+  /* Row 2 col 2: playback controls (5 buttons: shuffle, prev, play, next, repeat) + queue button */
   .dock-controls {
-    order: 2;
-    width: 100%;
+    grid-column: 2;
+    grid-row: 2;
+    order: 0;
+    width: auto;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 4px;
+    padding: 0 0 0 4px;
   }
 
-  /* Row 2: cover | meta | controls */
+  .dock-queue-btn {
+    grid-column: 3;
+    grid-row: 2;
+    order: 0;
+    width: 30px;
+    height: 30px;
+    margin-left: auto;
+    margin-right: 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.08);
+  }
+
+  .dock-queue-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--text, #f5f5f7);
+  }
+
+  /* Row 2 col 1: cover + meta (let meta shrink) */
   .dock-left {
-    width: 100%;
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 10px;
-    order: 2;
+    order: 0;
     min-height: 0;
+    padding: 0 0 0 10px;
+    overflow: hidden;
   }
 
   .dock-left .cover {
@@ -2287,19 +2231,16 @@ img {
     border-radius: 5px;
   }
 
-  .player-meta-stack {
-    flex: 1;
+  .titleStack.player-meta-stack {
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+    flex: 1 1 auto;
     overflow: hidden;
   }
 
   .player-meta-stack #title {
     font-size: 12px;
     font-weight: 600;
-    line-height: 1.15;
+    line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2307,89 +2248,52 @@ img {
 
   .player-meta-stack #subtitle {
     font-size: 10px;
-    line-height: 1.15;
+    line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--text-secondary);
   }
 
-  /* Row 3: status + shuffle + repeat + volume + queue + menu */
+  #playerQueueInfo,
+  #nowSourcePill {
+    display: none !important;
+  }
+
+  /* Hide dock-right on mobile (status, badge moved to other UI surfaces) */
   .dock-right {
-    width: 100%;
-    display: flex !important;
-    align-items: center;
-    justify-content: space-between;
-    gap: 4px;
-    order: 3;
-    min-height: 0;
-    padding: 0;
-    height: 20px;
+    display: none !important;
   }
 
-  .dock-right #qualitySwitchBadge {
-    font-size: 9px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: rgba(252, 60, 68, 0.16);
-    color: var(--accent, #fc3c44);
-    line-height: 1.2;
-  }
-
-  .dock-right #playerStatus {
-    font-size: 9px;
-    color: var(--text-secondary);
-    line-height: 1.2;
-  }
-
-  .dock-right .volume-wrap {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-  }
-
-  .dock-right .volume-wrap .iconBtn,
-  .dock-right .iconBtn {
-    width: 22px;
-    height: 22px;
-  }
-
-  .dock-right .volume-wrap .iconBtn svg,
-  .dock-right .iconBtn svg {
-    width: 11px;
-    height: 11px;
-  }
-
-  .dock-controls {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-  }
-
+  /* Compact playback controls */
   .dock-controls .iconBtn {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
   }
 
   .dock-controls .iconBtn svg {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
 
   .dock-controls .play-btn {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
+    background: var(--accent, #fc3c44) !important;
+    color: #fff !important;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(252, 60, 68, 0.35);
   }
 
   .dock-controls .play-btn svg {
     width: 13px;
     height: 13px;
+    fill: #fff;
   }
 
-  .dock-controls #shuffle,
-  .dock-controls #repeat {
-    display: none;
+  /* shuffle/repeat active tint */
+  .dock-controls .iconBtn.active {
+    color: var(--accent, #fc3c44);
   }
 
   .detailHead,
@@ -2491,16 +2395,70 @@ img {
   }
 
   .dock-controls .iconBtn {
-    width: 34px;
-    height: 34px;
+    width: 22px;
+    height: 22px;
   }
 
   .dock-controls .play-btn {
-    width: 40px;
-    height: 40px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .dock-left .cover {
+    width: 30px;
+    height: 30px;
   }
 
   .player-meta-stack {
-    max-width: 120px;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .dock-queue-btn {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* ═══ Marquee for long titles/subtitles (one-shot scroll, stops at start) ═══ */
+@keyframes qdp-marquee-scroll {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(var(--marquee-shift, 0px)); }
+}
+
+.marquee {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 12px), transparent 100%);
+}
+
+.marquee-track {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.marquee.is-overflow .marquee-track {
+  animation: qdp-marquee-scroll 6s linear 0.4s 1 both;
+}
+
+.marquee-track > span {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* Mobile: marquee 容器要限制在 dock-left 宽度内 */
+@media (max-width: 720px) {
+  .player-meta-stack {
+    max-width: none;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .dock-left .marquee {
+    max-width: 100%;
+    min-width: 0;
   }
 }

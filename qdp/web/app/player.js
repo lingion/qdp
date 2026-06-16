@@ -22,6 +22,10 @@ function syncNowPlaying(meta){
   syncAuxiliaryUi();
   updateQueueInfo();
   updateDocumentTitle();
+  // 触发 marquee 重测
+  if(typeof window.qdpRefreshAllMarquees === 'function'){
+    requestAnimationFrame(()=>window.qdpRefreshAllMarquees());
+  }
 }
 function updateDocumentTitle(){
   const track = normTrack(state.queue[state.idx]);
