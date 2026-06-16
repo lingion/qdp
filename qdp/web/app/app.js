@@ -83,7 +83,11 @@ function resetMobileDrawerTouch(){
 }
 function canStartMobileDrawerSwipe(target){
   if(!target) return false;
-  // Match queue/playlists SCROLL containers specifically, not any class containing "queue"
+  // Only block swipes when user has deliberately scrolled down inside the queue/playlists container
+  // Use closest() on the sidebar panel itself to catch touches anywhere in the drawer
+  const sidebar = target.closest('#sidebar');
+  if(!sidebar) return false; // touch is outside the sidebar — don't intercept
+  // Check if the touch is inside a scrollable section that has been scrolled down
   const scrollRoot = target.closest('#queue, #myPlaylists, .sectionBody');
   if(scrollRoot && scrollRoot.scrollTop > MOBILE_DRAWER_SCROLL_GUARD) return false;
   return true;

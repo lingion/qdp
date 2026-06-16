@@ -13,7 +13,7 @@ from qdp.exceptions import (
     InvalidAppSecretError,
     InvalidQuality,
 )
-from qdp.utils import get_api_base_url, get_proxy_list
+from qdp.utils import get_api_base_url, get_proxy_list, fetch_web_player_credentials
 from rich.console import Console
 
 console = Console()
@@ -46,8 +46,42 @@ class Client:
         self.base = get_api_base_url()
         
         self.sec = None
+        self._auto_fetched_credentials = False
+        
+        # 对齐 QBDLX：login 前先尝试从 web player 获取最新凭据
+        self._pre_fetch_credentials()
+        
         self.auth(email, pwd, use_token, user_id, user_auth_token)
         self.cfg_setup()
+    
+    def _pre_fetch_credentials(self):
+        """QBDLX 对齐：优先从 web player bundle.js 自动获取 app_id/secret。
+        在 login 之前执行，确保 token login 使用正确的 app_id。"""
+        # 先验证 config secret 是否有效
+        for secret in self.secrets:
+            if secret and self.test_secret(secret):
+                self.sec = secret
+                return  # config 凭据有效
+        
+        # config secret 失效，从 web player 自动获取
+        console.print(f"[{C_WARN}]配置中的 App Secret 已失效，从 web player 自动获取...[/{C_WARN}]")
+        auto_id, auto_secrets = fetch_web_player_credentials()
+        if auto_id and auto_secrets:
+            # 尝试每个解码出的 secret，找到 getFileUrl 签名通过的那个
+            for secret in auto_secrets:
+                if self.test_secret(secret):
+                    self.sec = secret
+                    if self.id != auto_id:
+                        console.print(f"[{C_OK}]自动更新 app_id: {self.id} → {auto_id}[/{C_OK}]")
+                        self.id = auto_id
+                        self.session.headers.update({"X-App-Id": self.id})
+                    self._auto_fetched_credentials = True
+                    console.print(f"[{C_OK}]Web Player 凭据验证通过！[/{C_OK}]")
+                    return
+            console.print(f"[{C_ERR}]获取到 {len(auto_secrets)} 个 secret 但均验证失败。[/{C_ERR}]")
+        else:
+            console.print(f"[{C_ERR}]自动获取失败。[/{C_ERR}]")
+        console.print(f"[{C_ERR}]将使用配置中的值尝试。[/{C_ERR}]")
 
     def api_call(self, epoint, **kwargs):
         if epoint == "catalog/search":
@@ -202,16 +236,24 @@ class Client:
     def get_label_meta(self, id): return self.multi_meta("label/get", "albums_count", id, None)
     
     def test_secret(self, sec):
+        # BAD_SIG = secret 错误，返回 False
+        # 401 (无 token) = 此时还没登录, 不应该阻障 login
+        # 网络错误 / timeout = 一律当作 unknown, 返回 False (保守)
         try:
             self.api_call("track/getFileUrl", id=5966783, fmt_id=5, sec=sec)
             return True
-        except InvalidAppSecretError: return False
+        except InvalidAppSecretError:
+            return False
+        except (AuthenticationError, requests.exceptions.HTTPError, requests.exceptions.RequestException):
+            return False
 
     def cfg_setup(self):
-        for secret in self.secrets:
-            if not secret: continue
-            if self.test_secret(secret):
-                self.sec = secret
-                break
+        # _pre_fetch_credentials 已完成凭据验证，这里做兜底
+        if self.sec is None:
+            for secret in self.secrets:
+                if not secret: continue
+                if self.test_secret(secret):
+                    self.sec = secret
+                    break
         if self.sec is None:
             raise InvalidAppSecretError("无法找到有效的 App Secret，Qobuz 可能更新了加密算法。\n" + RESET)

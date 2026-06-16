@@ -1364,7 +1364,13 @@ function makeBtn(label, onClick, cls='btn small'){
   b.addEventListener('click', (e)=>{ e.stopPropagation(); onClick(e); });
   return b;
 }
-function makeIconButton(iconName, onClick, title='', ...args){
+// New signature: makeIconButton(iconName, onClick, title, entity, ...args)
+// - onClick: string (window function name) or function
+// - title: tooltip string (use makeIconButton's title — pass entity as 4th arg if you need it)
+// - entity: bound arg (will be passed as 1st arg to handler)
+// - ...args: extra args passed after entity
+// If onClick is a string, we call window[onClick](entity, ...args, e, b)
+function makeIconButton(iconName, onClick, title='', entity=null, ...args){
   const b = document.createElement('button');
   b.className = 'btn small iconOnlyBtn';
   b.title = title;
@@ -1373,13 +1379,15 @@ function makeIconButton(iconName, onClick, title='', ...args){
   paintIcons(b);
   // If onClick is a string, look it up from window at click time (enables hot-reload)
   const fnName = typeof onClick === 'string' ? onClick : null;
-  b.addEventListener('click', (e)=>{ 
-    e.stopPropagation(); 
-    try{ 
+  b.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    try{
       const handler = fnName ? window[fnName] : onClick;
-      const r = handler.call(b, e, ...args); 
-      if(r && r.catch) r.catch((err)=>console.error('[action-btn]', err)); 
-    }catch(err){ console.error('[action-btn]', err); } 
+      if(!handler){ console.error('[action-btn] handler not found:', fnName); return; }
+      // Call handler: window[name](entity, ...args, e, b)  OR  handler(entity, ...args, e, b)
+      const r = handler.call(b, entity, ...args, e, b);
+      if(r && r.catch) r.catch((err)=>console.error('[action-btn]', err));
+    }catch(err){ console.error('[action-btn]', err); }
   });
   return b;
 }
