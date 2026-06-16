@@ -1544,6 +1544,28 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                 self._send_api_success({"audio": {"size_bytes": 0, "count": 0}, "total": {"size_bytes": 0, "count": 0}})
             return
 
+        if path == "/api/browse-dirs":
+            # List subdirectories under the requested path so the download modal can
+            # preview + navigate to a destination folder. Limits how deep + how many we
+            # return to keep the modal snappy on huge file systems.
+            req_path = (qs.get("path") or [""])[0].strip()
+            base = req_path or os.path.expanduser("~/Music/qdp")
+            base = os.path.abspath(os.path.expanduser(base))
+            parent = os.path.dirname(base)
+            try:
+                entries = []
+                if os.path.isdir(base):
+                    for name in sorted(os.listdir(base)):
+                        full = os.path.join(base, name)
+                        if os.path.isdir(full) and not name.startswith("."):
+                            entries.append({"name": name, "path": full})
+                # Trim to first 200 so the modal doesn't get a wall of dirs.
+                entries = entries[:200]
+                self._send_api_success({"path": base, "parent": parent, "dirs": entries})
+            except OSError as exc:
+                self._send_api_error(400, "browse_failed", str(exc)[:200])
+            return
+
         if path == "/api/cached-track":
             tid = (qs.get("id") or [""])[0]
             fmt = self._parse_int_query(qs, "fmt", 5, minimum=5)
@@ -1623,11 +1645,16 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                             f.write(chunk)
                     self._send_api_success({"path": save_path, "filename": filename})
                 elif dl_type == "album":
-                    tracks = client.get_album_tracks(tid)
+                    album_meta = client.get_album_meta(tid)
+                    if not album_meta:
+                        self._send_api_error(404, "album_not_found", "album metadata unavailable")
+                        return
+                    # Qobuz returns tracks as {"items": [...], "total": N} under the "tracks" key
+                    tracks_container = album_meta.get("tracks") or {}
+                    tracks = tracks_container.get("items") if isinstance(tracks_container, dict) else tracks_container
                     if not tracks:
                         self._send_api_error(404, "album_empty", "album has no tracks")
                         return
-                    album_meta = client.get_album_meta(tid)
                     album_name = _sanitize_download_filename((album_meta or {}).get("title") or f"album_{tid}")
                     album_dir = os.path.join(dl_path, album_name)
                     os.makedirs(album_dir, exist_ok=True)
