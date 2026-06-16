@@ -1776,6 +1776,14 @@ img {
   }
 
   /* Mobile topbar (visible only ≤ 980px) */
+  .mobile-search-area {
+    display: block;
+  }
+
+  .mobile-search-type-tabs {
+    display: flex;
+  }
+
   .mobile-topbar {
     display: flex;
     align-items: center;
