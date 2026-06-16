@@ -450,7 +450,7 @@ const state = {
   volume: clampVolume(localStorage.getItem(VOLUME_KEY)),
   muted: localStorage.getItem(MUTED_KEY) === '1',
   volumePopoverOpen: false,
-  sidebarSections: { queue: true, playlists: false },
+  sidebarSections: { queue: true, playlists: false, downloads: true },
   activeSidePanel: null,
   lastNonZeroVolume: (()=>{ const v = clampVolume(localStorage.getItem(LAST_NONZERO_VOLUME_KEY)); return (v > 0) ? v : 1; })(),
   queue: [],
@@ -1563,6 +1563,103 @@ let _downloadModalState = {
   defaultPath: '',
   loading: false,
 };
+
+// ─── Sidebar: Download Tasks Tracker ───
+let _downloadTasks = []; // {id, title, kind, total, completed, current, status, error, speed, startedAt, finishedAt}
+let _downloadTaskSeq = 0;
+
+function _registerDownloadTask(meta){
+  const id = `dl_${++_downloadTaskSeq}_${Date.now()}`;
+  const task = Object.assign({
+    id,
+    title: meta.title || '下载任务',
+    kind: meta.kind || 'track',
+    total: meta.total || 1,
+    completed: 0,
+    current: '',
+    status: 'running',
+    error: '',
+    speed: '',
+    startedAt: Date.now(),
+    finishedAt: 0,
+  }, meta);
+  task.id = id;
+  _downloadTasks.unshift(task);
+  if(_downloadTasks.length > 30) _downloadTasks.length = 30;
+  _renderDownloadTasks();
+  return task;
+}
+
+function _updateDownloadTask(id, patch){
+  const t = _downloadTasks.find(x => x.id === id);
+  if(!t) return null;
+  Object.assign(t, patch || {});
+  _renderDownloadTasks();
+  return t;
+}
+
+function _completeDownloadTask(id, status, errorMsg){
+  const patch = { status, finishedAt: Date.now() };
+  if(errorMsg) patch.error = errorMsg;
+  return _updateDownloadTask(id, patch);
+}
+
+function _removeDownloadTask(id){
+  _downloadTasks = _downloadTasks.filter(x => x.id !== id);
+  _renderDownloadTasks();
+}
+
+function _clearCompletedDownloads(){
+  _downloadTasks = _downloadTasks.filter(t => t.status !== 'done' && t.status !== 'error');
+  _renderDownloadTasks();
+}
+
+function _renderDownloadTasks(){
+  const section = $('downloadsSection');
+  const listEl = $('downloadsList');
+  const badge = $('downloadsBadge');
+  if(!section || !listEl) return;
+
+  const visible = _downloadTasks.length > 0;
+  section.hidden = !visible;
+
+  const activeCount = _downloadTasks.filter(t => t.status === 'running').length;
+  if(badge) badge.textContent = String(activeCount || _downloadTasks.length);
+
+  if(!visible){
+    listEl.innerHTML = '';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  _downloadTasks.forEach((t) => {
+    const item = document.createElement('div');
+    item.className = `downloadItem is-${t.status}`;
+    item.dataset.id = t.id;
+
+    const pct = t.total > 0 ? Math.min(100, Math.round((t.completed / t.total) * 100)) : 0;
+    const statusLabel = t.status === 'running' ? '下载中' : (t.status === 'done' ? '完成' : (t.status === 'error' ? '失败' : '等待'));
+    const metaText = t.total > 1
+      ? `${t.completed}/${t.total} · ${pct}%${t.speed ? ' · ' + t.speed : ''}`
+      : (t.current || (t.status === 'done' ? '已完成' : '准备中…'));
+
+    item.innerHTML = `
+      <button class="downloadRemoveBtn" type="button" title="移除" aria-label="移除下载任务">×</button>
+      <div class="downloadTitle">
+        <span class="downloadTitleText">${esc(t.title)}</span>
+        <span class="downloadStatusBadge">${statusLabel}</span>
+      </div>
+      <div class="downloadMeta">${esc(metaText)}</div>
+      <div class="downloadProgressTrack"><div class="downloadProgressFill" style="width:${pct}%"></div></div>
+      ${t.error ? `<div class="downloadErrorMsg">${esc(t.error)}</div>` : ''}
+    `;
+    item.querySelector('.downloadRemoveBtn').addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      _removeDownloadTask(t.id);
+    });
+    listEl.appendChild(item);
+  });
+}
 let _browseDirState = {
   currentPath: '',
   parentPath: null,
@@ -1722,6 +1819,15 @@ async function confirmDownloadModal(){
 
   if(bulkTracks && bulkTracks.length > 1){
     closeDownloadModal();
+    const task = _registerDownloadTask({
+      title: bulkTitle || (bulkType === 'playlist' ? '歌单' : '专辑'),
+      kind: bulkType,
+      total: bulkTracks.length,
+      completed: 0,
+      current: '准备下载…',
+      status: 'running',
+    });
+    _activeBulkDownloadTaskId = task.id;
     if(bulkType === 'playlist'){
       const p = encodeURIComponent(downloadPath);
       api(`/api/download-tagged?id=local-playlist&fmt=${fmt}&path=${p}&embed=${embed}&type=playlist&workers=${workers}`, {
@@ -1732,10 +1838,14 @@ async function confirmDownloadModal(){
       })
         .then((res) => {
           const savedPath = res?.path || downloadPath;
+          _updateDownloadTask(task.id, { completed: bulkTracks.length, status: 'done', current: '已完成' });
+          _activeBulkDownloadTaskId = null;
           showToast(`${bulkTitle || '歌单'}已保存至: ${savedPath}`, 'success', 5000);
           setPlayerStatus('download', `${bulkTitle || '歌单'} · ${bulkTracks.length} 首`, { reason: 'playlist-download' });
         })
         .catch((err) => {
+          _updateDownloadTask(task.id, { status: 'error', error: err?.message || '未知错误' });
+          _activeBulkDownloadTaskId = null;
           showToast(`下载失败: ${err?.message || '未知错误'}`, 'error');
         });
       return;
@@ -1749,32 +1859,33 @@ async function confirmDownloadModal(){
     return;
   }
 
-  _downloadModalState.loading = true;
-  const confirmBtn = $('downloadModalConfirmBtn');
-  if(confirmBtn){
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = '下载中…';
-  }
+  // Close modal IMMEDIATELY — don't wait for download to finish
+  closeDownloadModal();
+  _downloadModalState.loading = false;
 
-  try{
-    const id = encodeURIComponent(t.id);
-    const path = encodeURIComponent(downloadPath);
-    const res = await api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}&workers=${workers}`, { method: 'POST', timeout: 600000 });
+  const task = _registerDownloadTask({
+    title: t.title || '当前歌曲',
+    kind: 'track',
+    total: 1,
+    completed: 0,
+    current: '准备下载…',
+    status: 'running',
+  });
+  const id = encodeURIComponent(t.id);
+  const path = encodeURIComponent(downloadPath);
+  showToast(`开始下载: ${t.title || '当前歌曲'}`, 'info', 2500);
+  setPlayerStatus('download', `${t.title || '当前歌曲'} · ${describeQuality(fmt).label}`);
 
-    const savedPath = res?.path || downloadPath;
-    showToast(`文件已保存至: ${savedPath}`, 'success', 5000);
-    setPlayerStatus('download', `${t.title || '当前歌曲'} · ${describeQuality(fmt).label}`);
-
-    closeDownloadModal();
-  }catch(err){
-    showToast(`下载失败: ${err?.message || '未知错误'}`, 'error');
-  }finally{
-    _downloadModalState.loading = false;
-    if(confirmBtn){
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = '下载';
-    }
-  }
+  api(`/api/download-tagged?id=${id}&fmt=${fmt}&path=${path}&embed=${embed}&workers=${workers}`, { method: 'POST', timeout: 600000 })
+    .then((res) => {
+      const savedPath = res?.path || downloadPath;
+      _updateDownloadTask(task.id, { completed: 1, status: 'done', current: '已完成' });
+      showToast(`文件已保存至: ${savedPath}`, 'success', 5000);
+    })
+    .catch((err) => {
+      _updateDownloadTask(task.id, { status: 'error', error: err?.message || '未知错误' });
+      showToast(`下载失败: ${err?.message || '未知错误'}`, 'error');
+    });
 }
 
 function cancelDownloadModal(){
@@ -1981,6 +2092,7 @@ function triggerBulkAlbumDownload(albumId, tracks, fmt = currentQuality(), downl
     return;
   }
   const effectiveAlbumId = albumId || normalized[0]?.albumId || '';
+  const activeTaskId = _activeBulkDownloadTaskId;
   if(effectiveAlbumId){
     // Single album download using download_release
     const id = encodeURIComponent(effectiveAlbumId);
@@ -1989,10 +2101,14 @@ function triggerBulkAlbumDownload(albumId, tracks, fmt = currentQuality(), downl
       .then((res) => {
         const savedPath = res?.path || path;
         const label = title || '专辑';
+        if(activeTaskId) _updateDownloadTask(activeTaskId, { completed: normalized.length, status: 'done', current: '已完成' });
+        _activeBulkDownloadTaskId = null;
         showToast(`${label}已保存至: ${savedPath}`, 'success', 5000);
         setPlayerStatus('download', `${label} · ${describeQuality(fmt).label}`);
       })
       .catch((err) => {
+        if(activeTaskId) _updateDownloadTask(activeTaskId, { status: 'error', error: err?.message || '未知错误' });
+        _activeBulkDownloadTaskId = null;
         showToast(`下载失败: ${err?.message || '未知错误'}`, 'error');
       });
   }else{

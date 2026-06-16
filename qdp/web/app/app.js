@@ -606,6 +606,10 @@ function bindUI(){
   $('mobileTabPlaylists').addEventListener('click', ()=>setMobileSidebarTab('playlists'));
   $('queueSectionToggle').addEventListener('click', ()=>toggleSidebarSection('queue'));
   $('playlistsSectionToggle').addEventListener('click', ()=>toggleSidebarSection('playlists'));
+  const downloadsSectionToggle = $('downloadsSectionToggle');
+  if(downloadsSectionToggle) downloadsSectionToggle.addEventListener('click', ()=>toggleSidebarSection('downloads'));
+  const clearCompletedDownloadsBtn = $('clearCompletedDownloads');
+  if(clearCompletedDownloadsBtn) clearCompletedDownloadsBtn.addEventListener('click', ()=>_clearCompletedDownloads());
   let _resizeTimer = 0;
   const debouncedResize = ()=> {
     clearTimeout(_resizeTimer);
