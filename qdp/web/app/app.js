@@ -83,7 +83,8 @@ function resetMobileDrawerTouch(){
 }
 function canStartMobileDrawerSwipe(target){
   if(!target) return false;
-  const scrollRoot = target.closest('.queue, .playlists');
+  // Match queue/playlists SCROLL containers specifically, not any class containing "queue"
+  const scrollRoot = target.closest('#queue, #myPlaylists, .sectionBody');
   if(scrollRoot && scrollRoot.scrollTop > MOBILE_DRAWER_SCROLL_GUARD) return false;
   return true;
 }
