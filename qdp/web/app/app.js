@@ -552,6 +552,15 @@ function bindUI(){
   });
   $('mobileSidebarToggle').addEventListener('click', ()=>setMobileSidebarOpen(!state.mobileSidebarOpen));
   $('mobileSidebarClose').addEventListener('click', ()=>setMobileSidebarOpen(false));
+
+  // 移动端 dock 队列按钮 = dockMenuBtn 同样行为
+  const dockQueueBtn = $('dockQueueBtn');
+  if(dockQueueBtn){
+    dockQueueBtn.addEventListener('click', ()=>{
+      const dockMenuBtnEl = $('dockMenuBtn');
+      if(dockMenuBtnEl) dockMenuBtnEl.click();
+    });
+  }
   $('mobileSidebarOverlay').addEventListener('click', ()=>setMobileSidebarOpen(false));
   $('mobileSettingsBtn').addEventListener('click', ()=>toggleMobileSettings());
   $('mobileSettingsBackdrop').addEventListener('click', ()=>setMobileSettingsOpen(false));
@@ -946,4 +955,41 @@ window.addEventListener('hashchange', ()=>{
 
 window.addEventListener('popstate', ()=>{
   restoreRouteFromLocation().catch((err)=>console.error('route restore failed', err));
+});
+
+// ═══ Marquee: one-shot horizontal scroll for long titles/subtitles ═══
+function refreshMarquee(container){
+  if(!container) return;
+  const track = container.querySelector('.marquee-track');
+  if(!track) return;
+  // 测是否溢出
+  const overflow = track.scrollWidth - container.clientWidth;
+  if(overflow > 4){
+    // 计算左移距离 = scrollWidth - clientWidth + 8px 缓冲
+    const shift = overflow + 12;
+    container.style.setProperty('--marquee-shift', `-${shift}px`);
+    // 重启 animation：先 remove class，强制 reflow，再 add class
+    container.classList.remove('is-overflow');
+    void container.offsetWidth;
+    container.classList.add('is-overflow');
+  } else {
+    container.classList.remove('is-overflow');
+    container.style.removeProperty('--marquee-shift');
+  }
+}
+function refreshAllMarquees(){
+  document.querySelectorAll('[data-marquee]').forEach(refreshMarquee);
+}
+// 暴露到 window 让 player.js 调
+window.qdpRefreshMarquee = refreshMarquee;
+window.qdpRefreshAllMarquees = refreshAllMarquees;
+// 初次加载 + 视口变化时刷一次
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', ()=>setTimeout(refreshAllMarquees, 50));
+} else {
+  setTimeout(refreshAllMarquees, 50);
+}
+window.addEventListener('resize', ()=>{
+  clearTimeout(window._qdpMarqueeResize);
+  window._qdpMarqueeResize = setTimeout(refreshAllMarquees, 150);
 });
