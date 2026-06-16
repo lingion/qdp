@@ -470,13 +470,13 @@ function appendSearchCards(root, items){
       const t = normTrack(it);
       root.appendChild(card(t.image, t.title, t.artist || '', ()=>playTrackNow(t), [
         makeTrackDownloadLink(t, 'Download track'),
-        makeIconButton('play', ()=>playTrackNow(t), 'Play'),
+        makeIconButton('play', 'playTrackNow', t),
         makeIconButton('plus', ()=>choosePlaylistForTrack(t), 'Add to playlist'),
       ], { audioSpec: formatAudioSpec(t), audioSpecSource: t, entity: t }));
     }else if(state.type === 'albums'){
       root.appendChild(card(it.image, it.title, joinMetaParts([it.artist]), ()=>openAlbum(it.id), [
         makeAlbumDownloadLink(it, 'Download album'),
-        makeIconButton('play', ()=>playAlbumNow(it.id), 'Play album'),
+        makeIconButton('play', 'playAlbumNow', it.id),
         makeIconButton('plus', async ()=>{ const full = await fetchAlbum(it.id); const tracks = (full?.tracks||[]).map(normTrack).filter(Boolean); choosePlaylistForTracks(tracks); }, 'Add to playlist'),
       ], { audioSpec: formatAudioSpec(it), audioSpecSource: it, entity: it }));
     }else if(state.type === 'artists'){
@@ -486,7 +486,7 @@ function appendSearchCards(root, items){
         `${it.albums_count || ''} 张专辑`,
         ()=>openArtist(it.id),
         [
-          makeIconButton('play', ()=>playArtistNow(it), 'Play artist'),
+          makeIconButton('play', 'playArtistNow', it),
           makeIconButton('plus', async ()=>{
             const full = await collectArtistTracks(it);
             if(full.length) choosePlaylistForTracks(full);
@@ -504,7 +504,7 @@ function appendSearchCards(root, items){
           const full = await api(`/api/playlist?id=${encodeURIComponent(it.id)}`);
           triggerBulkDownload(full?.tracks || []);
         }, 'Download'),
-        makeIconButton('play', ()=>playPlaylistNow(it.id), 'Play playlist'),
+        makeIconButton('play', 'playPlaylistNow', it.id),
         makeIconButton('plus', async ()=>{
           const full = await api(`/api/playlist?id=${encodeURIComponent(it.id)}`);
           const tracks = (full?.tracks || []).map(normTrack).filter(Boolean);

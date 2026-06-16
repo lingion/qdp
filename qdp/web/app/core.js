@@ -2,7 +2,28 @@
 
 // ═══ DOM Helpers ═══
 
-const $ = (id) => document.getElementById(id);
+// Null-safe stub: when an element ID is missing (e.g. desktop control bound in mobile layout),
+// return a chainable stub whose addEventListener/classList/etc are no-ops. This prevents
+// the legacy desktop bindUI calls from throwing on mobile-only layouts.
+const _makeNullEl = () => new Proxy(function(){}, {
+  get(_, prop){
+    if(prop === 'addEventListener' || prop === 'removeEventListener' || prop === 'setAttribute' || prop === 'removeAttribute' || prop === 'focus' || prop === 'blur' || prop === 'click' || prop === 'dispatchEvent' || prop === 'querySelector' || prop === 'querySelectorAll' || prop === 'appendChild' || prop === 'removeChild' || prop === 'replaceWith'){
+      return () => _makeNullEl();
+    }
+    if(prop === 'classList') return new Proxy({}, { get: ()=>()=>{}, has: ()=>true });
+    if(prop === 'style' || prop === 'dataset') return new Proxy({}, { get: ()=>'' , set: ()=>true });
+    if(prop === 'textContent' || prop === 'value' || prop === 'innerHTML' || prop === 'src' || prop === 'href') return '';
+    if(prop === 'children' || prop === 'childNodes') return [];
+    if(prop === 'parentElement' || prop === 'firstElementChild' || prop === 'lastElementChild') return _makeNullEl();
+    if(prop === 'offsetWidth' || prop === 'offsetHeight' || prop === 'clientWidth' || prop === 'clientHeight') return 0;
+    if(prop === 'getBoundingClientRect') return () => ({ left:0,top:0,right:0,bottom:0,width:0,height:0,x:0,y:0 });
+    if(prop === 'matches') return () => false;
+    return _makeNullEl();
+  },
+  set(){ return true; },
+});
+
+const $ = (id) => document.getElementById(id) || (typeof document !== 'undefined' ? _makeNullEl() : null);
 
 // ═══ Image Proxy ═══
 // static.qobuz.com images may be blocked. Rewrite to go through the qdp proxy.
@@ -1343,14 +1364,23 @@ function makeBtn(label, onClick, cls='btn small'){
   b.addEventListener('click', (e)=>{ e.stopPropagation(); onClick(e); });
   return b;
 }
-function makeIconButton(iconName, onClick, title=''){
+function makeIconButton(iconName, onClick, title='', ...args){
   const b = document.createElement('button');
   b.className = 'btn small iconOnlyBtn';
   b.title = title;
   if(title) b.setAttribute('aria-label', title);
   b.innerHTML = `<span class="icon" data-icon="${iconName}"></span>`;
   paintIcons(b);
-  b.addEventListener('click', (e)=>{ e.stopPropagation(); try{ const r = onClick(e); if(r && r.catch) r.catch((err)=>console.error('[action-btn]', err)); }catch(err){ console.error('[action-btn]', err); } });
+  // If onClick is a string, look it up from window at click time (enables hot-reload)
+  const fnName = typeof onClick === 'string' ? onClick : null;
+  b.addEventListener('click', (e)=>{ 
+    e.stopPropagation(); 
+    try{ 
+      const handler = fnName ? window[fnName] : onClick;
+      const r = handler.call(b, e, ...args); 
+      if(r && r.catch) r.catch((err)=>console.error('[action-btn]', err)); 
+    }catch(err){ console.error('[action-btn]', err); } 
+  });
   return b;
 }
 function makeIconLink(href, title='Download'){
