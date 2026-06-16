@@ -73,9 +73,11 @@ function setMobileSidebarTab(tab){
 function resetMobileDrawerTouch(){
   const touch = state.mobileDrawerTouch;
   touch.tracking = false;
+  touch.startX = 0;
   touch.startY = 0;
   touch.currentY = 0;
   touch.deltaY = 0;
+  touch.deltaX = 0;
   touch.engaged = false;
   touch.pointerId = null;
   const sidebar = $('sidebar');
@@ -101,9 +103,11 @@ function onMobileDrawerTouchStart(e){
   }
   const touch = state.mobileDrawerTouch;
   touch.tracking = true;
+  touch.startX = touchPoint.clientX;
   touch.startY = touchPoint.clientY;
   touch.currentY = touchPoint.clientY;
   touch.deltaY = 0;
+  touch.deltaX = 0;
   touch.engaged = false;
   touch.pointerId = touchPoint.identifier;
 }
@@ -113,8 +117,20 @@ function onMobileDrawerTouchMove(e){
   const touchPoint = Array.from(e.changedTouches || []).find((item)=>item.identifier === touch.pointerId);
   if(!touchPoint) return;
   const deltaY = Math.max(0, touchPoint.clientY - touch.startY);
+  const deltaX = touchPoint.clientX - touch.startX;
   touch.currentY = touchPoint.clientY;
   touch.deltaY = deltaY;
+  touch.deltaX = deltaX;
+  // Require the gesture to be mostly vertical (downward) and clearly a downward drag.
+  // If the user is moving horizontally (e.g. swiping sideways through cards), do NOT
+  // engage close-mode — this prevents the "any non-vertical swipe exits the drawer" bug
+  // that happens on iOS where a slightly diagonal upward drag was incorrectly treated
+  // as a down-swipe due to touch sample jitter.
+  const horizontalRatio = deltaY > 0 ? Math.abs(deltaX) / deltaY : Infinity;
+  if(horizontalRatio > 0.6){
+    // Mostly horizontal — user is doing something else (e.g. swiping cards / list)
+    return;
+  }
   if(deltaY <= 0) return;
   touch.engaged = true;
   const sidebar = $('sidebar');
