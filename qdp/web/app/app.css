@@ -1778,26 +1778,29 @@ img {
   /* Mobile topbar (visible only ≤ 980px) */
   .mobile-search-area {
     display: block;
-    padding: 8px 12px 12px;
+    padding: 14px 14px 14px;
   }
 
   .mobile-search-shell {
-    height: 38px;
-    border-radius: 999px;
-    background: var(--bg-shell, #2A2A2A);
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 12px;
+    gap: 10px;
+    padding: 0 14px;
     color: var(--text-secondary);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
   }
 
   .mobile-search-shell .search-glyph {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     flex: 0 0 auto;
     color: var(--text-secondary);
+    stroke-width: 1.6;
   }
 
   .mobile-search-shell #mobileQ {
@@ -1808,6 +1811,8 @@ img {
     outline: none;
     color: var(--text);
     font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
     line-height: 1.2;
     padding: 0;
     -webkit-appearance: none;
@@ -1856,7 +1861,7 @@ img {
   .mobile-search-type-tabs {
     display: flex;
     gap: 6px;
-    margin-top: 10px;
+    margin-top: 14px;
     padding: 0 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
