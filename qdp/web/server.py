@@ -61,6 +61,43 @@ _ENTITY_CACHE: Dict[tuple, dict] = {}
 _ENTITY_CACHE_TTL = 1800
 _ENTITY_CACHE_MAX = 1024
 _AUDIO_CACHE_INFLIGHT_LOCK = threading.Lock()
+
+_DOWNLOAD_SETTINGS_LOCK = threading.Lock()
+_DOWNLOAD_SETTINGS_FILE = os.path.expanduser("~/.config/qdp/download_settings.json")
+_DEFAULT_DOWNLOAD_PATH = os.path.expanduser("~/Music/qdp")
+_DEFAULT_DOWNLOAD_WORKERS = 3
+
+def _load_download_settings():
+    try:
+        with open(_DOWNLOAD_SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            data = json.loads(f.read() or "{}")
+        default_path = str(data.get('default_path') or '').strip() or _DEFAULT_DOWNLOAD_PATH
+        try:
+            workers = int(data.get('workers') or _DEFAULT_DOWNLOAD_WORKERS)
+        except (TypeError, ValueError):
+            workers = _DEFAULT_DOWNLOAD_WORKERS
+        workers = max(1, min(workers, 16))
+        return {'default_path': default_path, 'workers': workers}
+    except (OSError, ValueError):
+        return {'default_path': _DEFAULT_DOWNLOAD_PATH, 'workers': _DEFAULT_DOWNLOAD_WORKERS}
+
+def _save_download_settings(default_path=None, workers=None):
+    current = _load_download_settings()
+    if default_path is not None:
+        current['default_path'] = str(default_path).strip() or current['default_path']
+    if workers is not None:
+        try:
+            w = int(workers)
+        except (TypeError, ValueError):
+            w = current['workers']
+        current['workers'] = max(1, min(w, 16))
+    try:
+        os.makedirs(os.path.dirname(_DOWNLOAD_SETTINGS_FILE), exist_ok=True)
+        with open(_DOWNLOAD_SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(current, f, ensure_ascii=False, indent=2)
+    except OSError as exc:
+        print(f"[WARN] failed to save download settings: {exc}", file=sys.stderr)
+    return current
 _AUDIO_CACHE_INFLIGHT = set()
 _MAX_STREAM_BYTES = 800 * 1024 * 1024  # 800 MB hard cap per stream
 _DISCOVER_RANDOM_SEEDS = ["jazz", "classical", "pop", "new", "electronic", "soundtrack"]
@@ -797,6 +834,20 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
 
         if path == "/api/download-tagged":
             self._handle_app_api(parsed)
+            return
+
+        if path == "/api/download-settings":
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length > 0 else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8", errors="ignore") or "{}")
+            except Exception:
+                payload = {}
+            default_path = payload.get('default_path')
+            workers = payload.get('workers')
+            with _DOWNLOAD_SETTINGS_LOCK:
+                saved = _save_download_settings(default_path=default_path, workers=workers)
+            self._send_api_success(saved)
             return
 
         if path.startswith("/api.json/0.2/"):
@@ -1593,10 +1644,9 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/download-settings":
-            self._send_api_success({
-                "default_path": os.path.expanduser("~/Music/qdp"),
-                "workers": 3
-            })
+            with _DOWNLOAD_SETTINGS_LOCK:
+                settings = _load_download_settings()
+            self._send_api_success(settings)
             return
 
         if path == "/api/download-tagged":

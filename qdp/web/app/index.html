@@ -7,7 +7,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/app/app.css?v=2.14.11" />
+  <link rel="stylesheet" href="/app/app.css?v=2.14.12" />
 </head>
 <body>
   <div id="toastContainer"></div>
@@ -148,6 +148,22 @@
             </div>
           </div>
           <div id="queue" class="sectionBody"></div>
+        </div>
+
+        <div class="sideCard sidePanel" id="downloadsSection" hidden>
+          <div class="sideHeader">
+            <div class="sideTitleWrap">
+              <button id="downloadsSectionToggle" class="sectionToggle" type="button" aria-expanded="true">
+                <span class="sideTitle">下载任务</span>
+                <span class="sectionChevron" aria-hidden="true">⌄</span>
+              </button>
+              <div id="downloadsBadge" class="sourceBadge">0</div>
+            </div>
+            <div class="sideActions">
+              <button id="clearCompletedDownloads" class="btn small" type="button" title="清除已完成">清除</button>
+            </div>
+          </div>
+          <div id="downloadsList" class="sectionBody"></div>
         </div>
 
         <div class="sideCard sidePanel">
