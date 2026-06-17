@@ -288,6 +288,147 @@ def _download_filename_for_track(track_meta: dict, fmt: int) -> str:
     return f"{title}{ext}"
 
 
+# ─── Cover Art Embedding ───
+def _extract_cover_url(meta: dict, size: str = "large") -> str:
+    if not isinstance(meta, dict):
+        return ""
+    # Track-level: album.image
+    album = meta.get("album") or {}
+    if isinstance(album, dict):
+        img = album.get("image") or {}
+        if isinstance(img, dict):
+            url = img.get(size) or img.get("large") or img.get("small") or img.get("thumbnail") or ""
+            if url:
+                return str(url)
+    # Direct image field
+    img = meta.get("image") or {}
+    if isinstance(img, dict):
+        url = img.get(size) or img.get("large") or img.get("small") or img.get("thumbnail") or ""
+        if url:
+            return str(url)
+    return ""
+
+def _fetch_cover_bytes(url: str) -> Tuple[bytes, str]:
+    if not url:
+        return (b"", "")
+    # Strategy 1: use the active proxy if available (qdp reverse proxy)
+    proxy_host = ""
+    try:
+        proxy_host = get_active_proxy()
+    except Exception:
+        proxy_host = ""
+    last_exc = None
+    candidates = []
+    if proxy_host:
+        candidates.append(proxy_host.rstrip('/') + '/proxy?url=' + urllib.parse.quote(url, safe=''))
+    if 'static.qobuz.com' in url and proxy_host:
+        candidates.append(url.replace('https://static.qobuz.com', proxy_host.rstrip('/')))
+    candidates.append(url)  # fallback: direct
+    for fetch_url in candidates:
+        try:
+            r = requests.get(fetch_url, timeout=20, headers={
+                "User-Agent": _get_user_agent(),
+                "Referer": "https://play.qobuz.com/",
+            })
+            if r.status_code == 200 and len(r.content) > 100:
+                ctype = r.headers.get("Content-Type") or ""
+                if not ctype.startswith("image/"):
+                    ctype = "image/jpeg"
+                return (r.content, ctype)
+        except requests.exceptions.RequestException as exc:
+            last_exc = exc
+            continue
+    if last_exc:
+        logger.warning("Failed to fetch cover art %s: %s", url, last_exc)
+    return (b"", "")
+
+def _embed_cover_in_file(save_path: str, cover_url: str, track_meta: dict = None) -> bool:
+    """Embed cover art into a downloaded audio file. Returns True on success.
+    Supports MP3 (ID3 APIC) and FLAC (mutagen.flac.Picture)."""
+    if not cover_url or not os.path.isfile(save_path):
+        return False
+    ext = os.path.splitext(save_path)[1].lower()
+    cover_bytes, mime = _fetch_cover_bytes(cover_url)
+    if not cover_bytes:
+        return False
+    try:
+        if ext == ".mp3":
+            from mutagen.mp3 import MP3
+            from mutagen.id3 import ID3, APIC, error as ID3Error
+            try:
+                audio = MP3(save_path, ID3=ID3)
+            except ID3Error:
+                audio = MP3(save_path)
+                audio.add_tags()
+            if audio.tags is None:
+                audio.add_tags()
+            # Remove existing APIC frames
+            for key in list(audio.tags.keys()):
+                if key.startswith("APIC"):
+                    del audio.tags[key]
+            audio.tags.add(APIC(
+                encoding=3,  # UTF-8
+                mime=mime or "image/jpeg",
+                type=3,  # Cover (front)
+                desc="Cover",
+                data=cover_bytes,
+            ))
+            # Also set basic text tags if we have track metadata
+            if isinstance(track_meta, dict):
+                from mutagen.id3 import TIT2, TPE1, TALB, TRCK, TCON, TDRC
+                if track_meta.get("title"):
+                    audio.tags.add(TIT2(encoding=3, text=str(track_meta["title"])))
+                if track_meta.get("performer") or (track_meta.get("album") or {}).get("artist"):
+                    performer = track_meta.get("performer") or (track_meta.get("album") or {}).get("artist", {}).get("name", "")
+                    if performer:
+                        audio.tags.add(TPE1(encoding=3, text=str(performer)))
+                if (track_meta.get("album") or {}).get("title"):
+                    audio.tags.add(TALB(encoding=3, text=str((track_meta.get("album") or {}).get("title"))))
+                tn = track_meta.get("track_number") or track_meta.get("media_number")
+                if tn:
+                    audio.tags.add(TRCK(encoding=3, text=str(tn)))
+                if track_meta.get("album"):
+                    rd = track_meta["album"].get("release_date_original") or track_meta["album"].get("release_date_stream") or ""
+                    if rd:
+                        year = str(rd)[:4]
+                        audio.tags.add(TDRC(encoding=3, text=year))
+            audio.save()
+            return True
+        elif ext in (".flac", ".fla"):
+            from mutagen.flac import FLAC, Picture
+            audio = FLAC(save_path)
+            # Remove existing pictures
+            audio.clear_pictures()
+            pic = Picture()
+            pic.data = cover_bytes
+            pic.mime = mime or "image/jpeg"
+            pic.type = 3  # Cover (front)
+            audio.add_picture(pic)
+            # Set basic tags
+            if isinstance(track_meta, dict):
+                if track_meta.get("title"):
+                    audio["TITLE"] = str(track_meta["title"])
+                performer = track_meta.get("performer") or (track_meta.get("album") or {}).get("artist", {}).get("name", "")
+                if performer:
+                    audio["ARTIST"] = str(performer)
+                if (track_meta.get("album") or {}).get("title"):
+                    audio["ALBUM"] = str((track_meta.get("album") or {}).get("title"))
+                tn = track_meta.get("track_number") or track_meta.get("media_number")
+                if tn:
+                    audio["TRACKNUMBER"] = str(tn)
+                if track_meta.get("album"):
+                    rd = track_meta["album"].get("release_date_original") or track_meta["album"].get("release_date_stream") or ""
+                    if rd:
+                        audio["DATE"] = str(rd)[:4]
+            audio.save()
+            return True
+        else:
+            return False
+    except Exception as exc:
+        logger.warning("Failed to embed cover into %s: %s", save_path, exc)
+        return False
+
+
 def _parse_qobuz_url(url: str) -> Tuple[Optional[str], Optional[str]]:
     try:
         parsed = urllib.parse.urlparse(url)
@@ -1678,6 +1819,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                     if not raw_url:
                         self._send_api_error(502, "missing_upstream_url", "missing url")
                         return
+                    track_meta = None
                     try:
                         track_meta = client.get_track_meta(tid)
                         filename = _download_filename_for_track(track_meta, fmt)
@@ -1693,7 +1835,13 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                     with open(save_path, "wb") as f:
                         for chunk in resp.iter_content(8192):
                             f.write(chunk)
-                    self._send_api_success({"path": save_path, "filename": filename})
+                    # Embed cover art if requested
+                    cover_embedded = False
+                    if embed == "1" and track_meta:
+                        cover_url = _extract_cover_url(track_meta)
+                        if cover_url:
+                            cover_embedded = _embed_cover_in_file(save_path, cover_url, track_meta)
+                    self._send_api_success({"path": save_path, "filename": filename, "cover_embedded": cover_embedded})
                 elif dl_type == "album":
                     album_meta = client.get_album_meta(tid)
                     if not album_meta:
@@ -1713,6 +1861,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                         trk_id = trk.get("id")
                         if not trk_id:
                             continue
+                        trk_meta = None
                         try:
                             trk_url_info = client.get_track_url(str(trk_id), fmt)
                             trk_raw_url = (trk_url_info or {}).get("url")
@@ -1731,6 +1880,11 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                             with open(trk_save, "wb") as f:
                                 for chunk in r.iter_content(8192):
                                     f.write(chunk)
+                            # Embed cover art per track
+                            if embed == "1":
+                                cover_url = _extract_cover_url(trk_meta) if trk_meta else _extract_cover_url(album_meta)
+                                if cover_url:
+                                    _embed_cover_in_file(trk_save, cover_url, trk_meta)
                         except Exception as e:
                             logger.warning("Failed to download album track %s: %s", trk_id, e)
                     self._send_api_success({"path": album_dir, "filename": album_name})
@@ -1752,6 +1906,7 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                     os.makedirs(pl_dir, exist_ok=True)
                     base = "http://127.0.0.1:" + str(self.server.server_address[1])
                     for i, trk_id in enumerate(track_ids):
+                        trk_meta = None
                         try:
                             trk_url_info = client.get_track_url(str(trk_id), fmt)
                             trk_raw_url = (trk_url_info or {}).get("url")
@@ -1769,6 +1924,11 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
                             with open(trk_save, "wb") as f:
                                 for chunk in r.iter_content(8192):
                                     f.write(chunk)
+                            # Embed cover art per track
+                            if embed == "1" and trk_meta:
+                                cover_url = _extract_cover_url(trk_meta)
+                                if cover_url:
+                                    _embed_cover_in_file(trk_save, cover_url, trk_meta)
                         except Exception as e:
                             logger.warning("Failed to download playlist track %s: %s", trk_id, e)
                     self._send_api_success({"path": pl_dir})
