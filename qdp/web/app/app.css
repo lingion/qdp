@@ -1472,7 +1472,7 @@ img {
 .player-dock {
   grid-area: dock;
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 20px;
   height: var(--dock-height);
