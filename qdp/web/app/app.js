@@ -744,7 +744,9 @@ function bindUI(){
     const sidebarNav = e.target.closest('.sidebar-nav');
     if(sidebar && sidebar.classList.contains('open') && !isMobileLayout() && !sidebarNav){
       const dockMenuBtn = $('dockMenuBtn');
-      if(!sidebar.contains(e.target) && e.target !== dockMenuBtn && !(dockMenuBtn && dockMenuBtn.contains(e.target))){
+      const dockQueueBtn = $('dockQueueBtn');
+      const onToggleBtn = (el) => el && (e.target === el || el.contains(e.target));
+      if(!sidebar.contains(e.target) && !onToggleBtn(dockMenuBtn) && !onToggleBtn(dockQueueBtn)){
         sidebar.classList.remove('open');
         state.activeSidePanel = null;
         syncSidebarSections();
