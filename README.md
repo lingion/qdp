@@ -1,4 +1,13 @@
-# qdp
+<p align="center">
+  <a href="https://github.com/lingion/qdp/stargazers"><img src="https://img.shields.io/github/stars/lingion/qdp?style=for-the-badge&logo=github&color=FFD700" alt="Stars"></a>
+  <a href="https://github.com/lingion/qdp/network/members"><img src="https://img.shields.io/github/forks/lingion/qdp?style=for-the-badge&logo=github&color=8B5CF6" alt="Forks"></a>
+  <a href="https://github.com/lingion/qdp/issues"><img src="https://img.shields.io/github/issues/lingion/qdp?style=for-the-badge&logo=github&color=EF4444" alt="Issues"></a>
+  <a href="https://github.com/lingion/qdp/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lingion/qdp?style=for-the-badge&logo=github&color=10B981" alt="License"></a>
+  <br>
+  <a href="https://github.com/lingion/qdp/commits/main"><img src="https://img.shields.io/github/last-commit/lingion/qdp?style=flat-square" alt="Last commit"></a>
+  <a href="https://www.qobuz.com/"><img src="https://img.shields.io/badge/Qobuz-Mod-1ABD6F?style=flat-square" alt="Qobuz"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
+</p>
 
 qdp is a local Qobuz toolkit with an existing CLI/TUI downloader workflow and a local web player runtime.
 
