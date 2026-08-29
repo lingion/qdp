@@ -118,69 +118,98 @@ def get_bundle_base_url():
 def fetch_web_player_credentials(proxy_url=None):
     """自动从 play.qobuz.com bundle.js 提取最新 app_id 和 app_secret。
     对齐 QBDLX / qobuz-dl 逻辑：通过 seed+info+extras base64 解码提取 secret。
-    
+
+    CN 网络 play.qobuz.com 直连超时: 优先走配置的反向代理 /proxy?url=
+    透传, 失败再退回直连(+可选本地代理探测)。
+
     Args:
         proxy_url: 显式代理 URL（如 http://127.0.0.1:7897），None 时自动探测
-    
+
     Returns:
         tuple: (app_id, dict_of_secrets_by_timezone) 或 (None, None) 如果提取失败
         secrets dict 示例: {"london": "abc...", "berlin": "def...", "abidjan": "ghi..."}
     """
     import base64
     from collections import OrderedDict
-    
-    # 自动探测常见代理端口
-    if proxy_url is None:
-        for port in [7897, 7890, 1080, 1087, 8080]:
-            test_url = f"http://127.0.0.1:{port}"
-            try:
-                r = requests.get("https://play.qobuz.com/favicon.ico",
-                    proxies={"http": test_url, "https": test_url},
-                    timeout=5)
-                if r.status_code == 200:
-                    proxy_url = test_url
-                    logger.info("自动检测到代理: %s", proxy_url)
-                    break
-            except Exception:
-                continue
-    
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-    
-    s = requests.Session()
-    if proxies:
-        s.proxies = proxies
-    s.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
-    })
-    
-    # 1. 获取 login 页面，提取 bundle.js 路径
-    try:
-        r = s.get("https://play.qobuz.com/login", timeout=15)
+    from urllib.parse import quote
+
+    bundle_page = "https://play.qobuz.com"
+
+    def _direct_session(proxy_url):
+        """直连 session: 仅当 proxy_url 显式给出或探测到本地端口时挂代理。"""
+        if proxy_url is None:
+            for port in [7897, 7890, 1080, 1087, 8080]:
+                test_url = f"http://127.0.0.1:{port}"
+                try:
+                    r = requests.get(f"{bundle_page}/favicon.ico",
+                        proxies={"http": test_url, "https": test_url},
+                        timeout=5)
+                    if r.status_code == 200:
+                        proxy_url = test_url
+                        logger.info("自动检测到代理: %s", proxy_url)
+                        break
+                except Exception:
+                    continue
+        s = requests.Session()
+        if proxy_url:
+            s.proxies = {"http": proxy_url, "https": proxy_url}
+        s.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
+        })
+        return s
+
+    def s_get_direct(path, proxy_url, timeout=15):
+        session = _direct_session(proxy_url)
+        r = session.get(bundle_page + path, timeout=timeout)
         r.raise_for_status()
-    except Exception as e:
-        logger.warning("获取 play.qobuz.com/login 失败: %s", e)
-        return None, None
-    
+        return r
+
+    def _proxy_passthrough(path, timeout):
+        proxy_host = get_active_proxy()
+        if not proxy_host:
+            return None
+        try:
+            r = requests.get(
+                proxy_host.rstrip("/") + "/proxy?url=" + quote(bundle_page + path, safe=""),
+                timeout=timeout,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"},
+            )
+            if r.status_code == 200:
+                return r
+        except requests.exceptions.RequestException as exc:
+            logger.debug("代理透传失败 %s: %s", path, exc)
+        return None
+
+    # 1. 获取 login 页面：先代理透传（CN 友好），失败再直连
+    r = _proxy_passthrough("/login", timeout=15)
+    if r is None:
+        try:
+            r = s_get_direct("/login", proxy_url)
+        except Exception as e:
+            logger.warning("获取 play.qobuz.com/login 失败: %s", e)
+            return None, None
+
     bundle_match = re.search(r'<script src="(/resources/[\d.]+-[a-z]\d{3}/bundle\.js)"></script>', r.text)
     if not bundle_match:
         logger.warning("未在 login 页面中找到 bundle.js 路径")
         return None, None
-    
+
     bundle_path = bundle_match.group(1)
-    bundle_url = f"https://play.qobuz.com{bundle_path}"
-    logger.info("正在从 %s 提取凭据...", bundle_url)
-    
-    # 2. 下载 bundle.js
-    try:
-        r = s.get(bundle_url, timeout=30, stream=True)
-        r.raise_for_status()
-    except Exception as e:
-        logger.warning("下载 bundle.js 失败: %s", e)
-        return None, None
-    
-    bundle_text = ""
-    for chunk in r.iter_content(chunk_size=1024*512, decode_unicode=True):
-        bundle_text += chunk
+    logger.info("正在从 %s%s 提取凭据...", bundle_page, bundle_path)
+
+    # 2. 下载 bundle.js: 完整读入(禁 stream 分块解码 — iter_content 的
+    # decode_unicode 在 gzip 文本上会截断, 9MB bundle 只到一半, appId
+    # 正则命中 0)。同样先代理后直连。
+    r = _proxy_passthrough(bundle_path, timeout=60)
+    if r is not None:
+        bundle_text = r.text
+    else:
+        try:
+            r = s_get_direct(bundle_path, proxy_url, timeout=60)
+            bundle_text = r.text
+        except Exception as e:
+            logger.warning("下载 bundle.js 失败: %s", e)
+            return None, None
     
     # 3. 提取 app_id（production 环境）
     app_id_match = re.search(r'production:\s*\{[^}]*api:\s*\{appId:\s*"(\d{9})",\s*appSecret:\s*"\w{32}"', bundle_text)

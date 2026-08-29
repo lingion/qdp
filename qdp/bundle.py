@@ -2,6 +2,7 @@ import base64
 import logging
 import re
 from collections import OrderedDict
+from urllib.parse import quote
 
 from requests import Session
 
@@ -36,6 +37,32 @@ def _get_base_urls():
     return _BASE_URLS
 
 
+def _proxy_fetch(session, path, timeout):
+    """Fetch a play.qobuz.com path through the configured reverse proxy.
+
+    play.qobuz.com is unreachable from CN networks; the qdp reverse proxy
+    (same one API calls use) exposes a /proxy?url= passthrough. Returns the
+    response or None when no proxy is configured / the fetch fails.
+    """
+    try:
+        from qdp.utils import get_active_proxy
+
+        proxy_host = get_active_proxy()
+    except Exception as exc:  # pragma: no cover - config layer failure
+        logger.debug("Proxy lookup failed: %s", exc)
+        return None
+    if not proxy_host:
+        return None
+    try:
+        return session.get(
+            proxy_host.rstrip("/") + "/proxy?url=" + quote("https://play.qobuz.com" + path, safe=""),
+            timeout=timeout,
+        )
+    except Exception as exc:
+        logger.debug("Proxy fetch failed for %s: %s", path, exc)
+        return None
+
+
 class Bundle:
     def __init__(self):
         self._session = Session()
@@ -65,6 +92,17 @@ class Bundle:
                 logger.debug("Failed to fetch bundle from %s: %s", url, exc)
                 last_exc = exc
                 continue
+
+        # Direct access failed (CN networks): try the reverse-proxy
+        # passthrough for the login page + bundle before giving up.
+        login_resp = _proxy_fetch(self._session, "/login", timeout=15)
+        bundle_match = _BUNDLE_URL_REGEX.search(login_resp.text) if login_resp is not None and login_resp.status_code == 200 else None
+        if bundle_match:
+            bundle_resp = _proxy_fetch(self._session, bundle_match.group(1), timeout=60)
+            if bundle_resp is not None and bundle_resp.status_code == 200:
+                self._bundle = bundle_resp.text
+                logger.debug("Bundle fetched via reverse proxy")
+                return
 
         raise NotImplementedError(
             f"Failed to fetch bundle from all known URLs. "
