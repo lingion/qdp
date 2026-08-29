@@ -561,7 +561,10 @@ class Download:
     def download_batch(self, track_list, content_name="歌单", target_artist_id=None):
         final_list = track_list
         batch_ind_cover = True
-        if track_list and "tracks_count" in track_list[0] and "artist" in track_list[0]:
+        # 主艺人锁定只对真正的艺人 URL 批量生效(调用方显式传 target_artist_id)。
+        # 不能按数据形状判断: 歌单/厂牌规范化后的专辑对象同样含 tracks_count+artist,
+        # 否则歌单名会被当艺人名做子串匹配, 整批专辑被清空。
+        if target_artist_id and track_list and "artist" in track_list[0]:
             target_artist = content_name
             console.print(f"[{C_WARN}]主艺人锁定: {target_artist} (ID: {target_artist_id or 'Auto'})[/{C_WARN}]")
             filtered_items = []
