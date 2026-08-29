@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/lingion/qdp/releases"><img src="https://img.shields.io/github/v/release/lingion/qdp?style=flat-square&label=版本" alt="最新版本"></a>
+  <a href="https://github.com/lingion/qdp/releases"><img src="https://img.shields.io/badge/qdp-114.0.1-65d6a2?style=flat-square" alt="qdp 版本 114.0.1"></a>
   <img src="https://img.shields.io/github/stars/lingion/qdp?style=flat-square&logo=github" alt="Stars">
   <img src="https://img.shields.io/github/downloads/lingion/qdp/total?style=flat-square&label=下载量" alt="下载量">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-4c9aff?style=flat-square" alt="支持平台">
