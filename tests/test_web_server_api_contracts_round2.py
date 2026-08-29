@@ -39,7 +39,11 @@ class WebServerApiContractsRound2Tests(unittest.TestCase):
         payload = json.loads(handler.wfile.getvalue().decode("utf-8"))
         self.assertEqual(response["status"], 200)
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["data"]["url"], "/stream?url=https%3A%2F%2Fstream.example.com%2Ffile.flac")
+        # /stream 自 50dcb94 起附 track_id+fmt(音频缓存定位), 契约同步
+        self.assertEqual(
+            payload["data"]["url"],
+            "/stream?url=https%3A%2F%2Fstream.example.com%2Ffile.flac&track_id=42&fmt=6",
+        )
         self.assertIn("download_url", payload["data"])
 
     def test_stream_missing_url_returns_json_error(self):
