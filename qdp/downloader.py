@@ -154,6 +154,51 @@ class ProxyPool:
                 self._state[proxy]["cooldown_until"] = time.monotonic() + self.cooldown_sec
 
 
+_TMP_NAME_RE = re.compile(r"^\.\d{2}\.(\d+)\.tmp$")
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists but owned by someone else
+    except OSError:
+        return True  # conservatively assume alive
+    return True
+
+
+def cleanup_stale_tmp_files(root_dir: str) -> List[str]:
+    """Remove .NN.PID.tmp partial-download leftovers whose PID is dead.
+
+    Lives here as a module function so doctor / startup can call it without
+    instantiating a downloader. Skips files owned by running processes.
+    """
+    removed: List[str] = []
+    if not root_dir or not os.path.isdir(root_dir):
+        return removed
+    for current_root, _dirs, files in os.walk(root_dir):
+        for name in files:
+            match = _TMP_NAME_RE.match(name)
+            if not match:
+                continue
+            try:
+                pid = int(match.group(1))
+            except ValueError:
+                continue
+            if pid == os.getpid() or _pid_alive(pid):
+                continue
+            full = os.path.join(current_root, name)
+            try:
+                os.remove(full)
+                removed.append(full)
+                logger.info("Swept stale temp file: %s", full)
+            except OSError as exc:
+                logger.debug("Could not remove stale temp file %s: %s", full, exc)
+    return removed
+
+
 class Download:
     def __init__(
         self,
@@ -587,6 +632,7 @@ class Download:
     def download_batch(self, track_list, content_name="歌单", target_artist_id=None):
         final_list = track_list
         batch_ind_cover = True
+        self._sweep_stale_tmp(self.root_folder)
         # 主艺人锁定只对真正的艺人 URL 批量生效(调用方显式传 target_artist_id)。
         # 不能按数据形状判断: 歌单/厂牌规范化后的专辑对象同样含 tracks_count+artist,
         # 否则歌单名会被当艺人名做子串匹配, 整批专辑被清空。
@@ -655,6 +701,7 @@ class Download:
             return report.to_dict()
 
         os.makedirs(dirn, exist_ok=True)
+        self._sweep_stale_tmp(self.root_folder)
         self._download_cover_art(meta, dirn, "cover.jpg")
         self._download_booklet(meta, dirn)
 
@@ -962,6 +1009,14 @@ class Download:
             self._download_and_tag(self.path, 1, parse, meta, meta, True, is_mp3, None, progress, task_id, ind_cover=True, track_fmt=self.track_format)
         console.print(f"\n[{C_MAIN}]📂 保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
         return {"checked": False, "downloaded": True}
+
+    def _sweep_stale_tmp(self, root_dir: str) -> List[str]:
+        """Sweep orphaned .NN.PID.tmp files left by crashed processes.
+
+        Normal flow cleans up on exception and rename-on-success; only a
+        hard kill leaves them behind. Returns list of removed paths.
+        """
+        return cleanup_stale_tmp_files(root_dir)
 
     def _build_final_track_path(self, root_dir: str, formatted_name: str, extension: str, uniqueness_key: str) -> str:
         sanitized_name = sanitize_filename(formatted_name).strip() or "untitled"
