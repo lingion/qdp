@@ -326,16 +326,23 @@ def smart_discography_filter(contents: list, save_space: bool = False, skip_extr
 
     items = []
     for albums in title_grouped.values():
-        best_bit_depth = max(a.get("maximum_bit_depth", 16) for a in albums)
+        # API may return null quality fields; treat null like the default
+        # (.get default only applies when the key is missing, not when None).
+        bit_depths = [a.get("maximum_bit_depth") for a in albums]
+        bit_depths = [b for b in bit_depths if isinstance(b, (int, float))] or [16]
+        best_bit_depth = max(bit_depths)
         get_best = min if save_space else max
-        best_sampling_rate = get_best(
-            a.get("maximum_sampling_rate", 44.1)
-            for a in albums
-            if a.get("maximum_bit_depth") == best_bit_depth
-        )
+        same_depth = [a for a in albums if a.get("maximum_bit_depth") == best_bit_depth]
+        if not same_depth:
+            # all null: no album matches the 16-bit fallback — keep all and
+            # decide on sampling rate alone
+            same_depth = list(albums)
+        sampling_rates = [a.get("maximum_sampling_rate") for a in same_depth]
+        sampling_rates = [s for s in sampling_rates if isinstance(s, (int, float))] or [44.1]
+        best_sampling_rate = get_best(sampling_rates)
         filtered = [
-            a for a in albums
-            if a.get("maximum_bit_depth") == best_bit_depth and a.get("maximum_sampling_rate") == best_sampling_rate
+            a for a in same_depth
+            if a.get("maximum_sampling_rate") == best_sampling_rate
         ]
         if filtered:
             items.append(filtered[0])
