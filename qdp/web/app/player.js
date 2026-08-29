@@ -37,9 +37,9 @@ function updateDocumentTitle(){
   const a = track.artist || '';
   const mode = normalizePlayerUiMode(state.playerUi.mode);
   if(state.playing || mode === 'playing'){
-    document.title = t + ' — ' + a + ' | QDP';
+    document.title = '❚❚ ' + t + ' — ' + a + ' | QDP';
   }else if(mode === 'paused' || mode === 'idle'){
-    document.title = t + ' — ' + a + ' | QDP';
+    document.title = '❚❚ ' + t + ' — ' + a + ' | QDP';
   }else{
     document.title = 'QDP Web Player';
   }

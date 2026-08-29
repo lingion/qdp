@@ -85,7 +85,7 @@ echo ""
 
 ensure_dep() {
     if ! command -v "$1" &>/dev/null; then
-        echo "'$1' not found."
+        echo "✗ '$1' not found."
         case "$PLATFORM" in
             termux)
                 echo "  Run: pkg install $2"
@@ -131,7 +131,7 @@ for candidate in python3 python python3.12 python3.11 python3.10 python3.9; do
 done
 
 if [ -z "$PYTHON" ]; then
-    echo "Python 3.9+ not found."
+    echo "✗ Python 3.9+ not found."
     case "$PLATFORM" in
         termux)
             echo "  Run: pkg install python"

@@ -666,7 +666,7 @@ class Download:
             return {"checked": 0, "downloaded": 0}
 
         stats = self._run_multithreaded_download(final_list, self.path, None, False, ind_cover=batch_ind_cover, track_fmt=self.fmt_single)
-        console.print(f"[{C_OK}]{content_name} 任务结束[/{C_OK}]")
+        console.print(f"[{C_OK}]✔ {content_name} 任务结束[/{C_OK}]")
         console.print(f"[{C_MAIN}]保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
         return stats
 
