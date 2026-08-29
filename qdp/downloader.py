@@ -27,7 +27,7 @@ from rich.progress import (
 
 import qdp.metadata as metadata
 from qdp.db import handle_download_id, upsert_download_entry
-from qdp.exceptions import NonStreamable
+from qdp.exceptions import InvalidAppSecretError, NonStreamable
 from qdp.integrity import (
     AUDIO_EXTENSIONS,
     build_filename_context,
@@ -363,6 +363,10 @@ class Download:
     def _classify_retryable_error(self, exc: Exception) -> str:
         if isinstance(exc, DownloadPipelineError):
             return exc.category
+        # getFileUrl 的 400 有双重语义: secret 失效或该画质不存在。
+        # 按"可降级"处理: 试下一档, 若全部档位都 400 才是真 secret 失效。
+        if isinstance(exc, InvalidAppSecretError):
+            return "quality-fallback"
         message = str(exc).lower()
         if isinstance(exc, NonStreamable) or "试听" in message or "sample" in message or "不可串流" in message:
             return "copyright"
@@ -405,7 +409,7 @@ class Download:
                 }
                 self._track_url_cache[resolved_cache_key] = result
                 return result
-            except (DownloadPipelineError, NonStreamable, requests.exceptions.RequestException, ValueError, TypeError, KeyError) as exc:
+            except (DownloadPipelineError, InvalidAppSecretError, NonStreamable, requests.exceptions.RequestException, ValueError, TypeError, KeyError) as exc:
                 category = self._classify_retryable_error(exc)
                 attempts.append({"quality": candidate_quality, "category": category, "error": str(exc)})
                 log_level = logging.WARNING if category in {"auth", "copyright"} else logging.INFO
