@@ -133,6 +133,23 @@ def main(argv=None):
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         return _handle_config_command(config_args)
 
+    # `qdp update [--check]` — self-update, works without any config
+    if argv and argv[0].strip().lower() == "update":
+        from qdp.update import UpdateError, check_remote, run_update
+
+        update_parser = argparse.ArgumentParser(prog="qdp update", description="更新 qdp 到最新版")
+        update_parser.add_argument("--check", action="store_true", help="只检查是否有新版本,不更新")
+        update_args = update_parser.parse_args(argv[1:])
+        try:
+            if update_args.check:
+                has_update, message = check_remote()
+                console.print(f"[#e5c07b]{message}[/#e5c07b]" if has_update else f"[#98c379]{message}[/#98c379]")
+                return 1 if has_update else 0
+            return run_update()
+        except UpdateError as exc:
+            console.print(f"[#e06c75]✗ {exc}[/#e06c75]")
+            return 1
+
     initial_checks(console=console, config_file=CONFIG_FILE)
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
