@@ -667,7 +667,7 @@ class Download:
 
         stats = self._run_multithreaded_download(final_list, self.path, None, False, ind_cover=batch_ind_cover, track_fmt=self.fmt_single)
         console.print(f"[{C_OK}]{content_name} 任务结束[/{C_OK}]")
-        console.print(f"[{C_MAIN}]📂 保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
+        console.print(f"[{C_MAIN}]保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
         return stats
 
     def _process_real_track(self, item, count, total_items, meta, dirn, is_multiple, progress, task_id, ind_cover, track_fmt):
@@ -743,7 +743,7 @@ class Download:
                     "sidecar_path": sidecar_path,
                 },
             )
-        console.print(f"[{C_MAIN}]📂 保存于: {os.path.abspath(dirn)}[/{C_MAIN}]")
+        console.print(f"[{C_MAIN}]保存于: {os.path.abspath(dirn)}[/{C_MAIN}]")
         logger.info("Album download summary: %s", stats)
         return final_report.to_dict()
 
@@ -1007,7 +1007,7 @@ class Download:
             meta["_actual_quality"] = resolved.get("actual_quality") or {}
             is_mp3 = int((resolved.get("actual_quality") or {}).get("quality_code") or self.quality) == 5
             self._download_and_tag(self.path, 1, parse, meta, meta, True, is_mp3, None, progress, task_id, ind_cover=True, track_fmt=self.track_format)
-        console.print(f"\n[{C_MAIN}]📂 保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
+        console.print(f"\n[{C_MAIN}]保存于: {os.path.abspath(self.path)}[/{C_MAIN}]")
         return {"checked": False, "downloaded": True}
 
     def _sweep_stale_tmp(self, root_dir: str) -> List[str]:
