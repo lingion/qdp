@@ -265,6 +265,7 @@ class Download:
             current_track_format=self.track_format,
             downloads_db=self.downloads_db,
             repair_db=repair_db,
+            write_db=not self.check_only,
         )
         if announce:
             self.print_integrity_report(report)

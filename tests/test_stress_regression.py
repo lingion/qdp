@@ -79,8 +79,10 @@ class StressRegressionTests(unittest.TestCase):
             report, _, _ = d.inspect_album("album-1", announce=False, repair_db=True)
             self.assertFalse(report.complete)
             self.assertTrue(report.db_repaired)
+            # check-only must not write the DB: repair removes the stale row
+            # and nothing is written back (was: unconditional upsert -> incomplete)
             entry = get_download_entry(db_path, "album-1")
-            self.assertEqual(entry["integrity_status"], "incomplete")
+            self.assertIsNone(entry)
 
     def test_search_shortcut_stress_and_bulk_artist_selection(self):
         q = QobuzDL(check_only=True)
