@@ -60,10 +60,12 @@ class WebServerRuntimeTests(unittest.TestCase):
         self.assertEqual(port, 18901)
 
     def test_validate_stream_upstream_url_rejects_private_or_invalid_hosts(self):
-        self.assertEqual(
-            server._validate_stream_upstream_url("https://stream.example.com/audio.flac"),
-            "https://stream.example.com/audio.flac",
-        )
+        # 公网域名: mock DNS(公网 IP), 校验不得依赖外部解析
+        with patch.object(server.socket, "getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]):
+            self.assertEqual(
+                server._validate_stream_upstream_url("https://stream.example.com/audio.flac"),
+                "https://stream.example.com/audio.flac",
+            )
         for invalid in [
             "",
             "ftp://stream.example.com/file.flac",
@@ -144,7 +146,7 @@ class WebServerRuntimeTests(unittest.TestCase):
             base_url = self._wait_for_server("127.0.0.1", 18911)
 
             root_resp = requests.get(base_url + "/", allow_redirects=False, timeout=5)
-            app_resp = requests.get(base_url + "/app/", timeout=5, headers={"Origin": "http://127.0.0.1:3000"})
+            app_resp = requests.get(base_url + "/app/", timeout=5, headers={"Origin": "http://127.0.0.1:18911"})
             version_resp = requests.get(base_url + "/__version", timeout=5)
             meta_resp = requests.get(base_url + "/api/meta", timeout=5)
             missing_resp = requests.get(base_url + "/missing-route", timeout=5)
@@ -155,7 +157,8 @@ class WebServerRuntimeTests(unittest.TestCase):
             self.assertEqual(root_resp.headers.get("Location"), "/app/")
             self.assertEqual(app_resp.status_code, 200)
             self.assertIn("runtime ok", app_resp.text)
-            self.assertEqual(app_resp.headers.get("Access-Control-Allow-Origin"), "http://127.0.0.1:3000")
+            # CORS 收紧后只放行服务器自身端口 Origin(不再放行任意本机端口)
+            self.assertEqual(app_resp.headers.get("Access-Control-Allow-Origin"), "http://127.0.0.1:18911")
             self.assertEqual(version_resp.status_code, 200)
             version_payload = version_resp.json()
             self.assertTrue(version_payload["ok"])
