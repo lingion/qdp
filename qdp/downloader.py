@@ -1133,7 +1133,9 @@ class Download:
             if int(self.quality) > 6 and new_track_dict.get("bit_depth") == 16:
                 quality_met = False
             return ("FLAC", quality_met, new_track_dict.get("bit_depth"), new_track_dict.get("sampling_rate"))
-        except (DownloadPipelineError, NonStreamable, requests.exceptions.RequestException, ValueError, TypeError, KeyError) as exc:
+        except Exception as exc:
+            # 专辑目录命名只是尽力解析画质: secret 失效(InvalidAppSecretError)或网络异常
+            # 都不该让 inspect_album 崩掉, 退回 Unknown 沿用元数据默认命名。
             logger.warning("Unable to resolve format for %s: %s", item_dict.get('id'), exc)
             return ("Unknown", quality_met, None, None)
 
