@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Dict, List, Mapping, Optional, Tuple
 
+from qdp import utils
+
 def _config_file_default() -> str:
     if os.name == 'nt':
         base = os.environ.get('APPDATA') or os.path.expanduser('~')
@@ -81,9 +83,7 @@ def _load_config(config_file: str = CONFIG_FILE) -> configparser.ConfigParser:
 
 
 def _save_config(config: configparser.ConfigParser, config_file: str = CONFIG_FILE):
-    os.makedirs(os.path.dirname(config_file), exist_ok=True)
-    with open(config_file, 'w') as fp:
-        config.write(fp)
+    utils.atomic_write_config(config, config_file)
 
 
 def _sanitize_account_name(name: str) -> str:
