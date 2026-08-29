@@ -10,9 +10,9 @@ set -e
 R='\033[0;31m'; G='\033[0;32m'; Y='\033[1;33m'; B='\033[0;34m'; N='\033[0m'
 
 log()   { printf "${B}▸${N} %s\n" "$*"; }
-ok()    { printf "${G}✓${N} %s\n" "$*"; }
+ok()    { printf "${G}[OK]${N} %s\n" "$*"; }
 warn()  { printf "${Y}!${N} %s\n" "$*"; }
-err()   { printf "${R}✗${N} %s\n" "$*" >&2; }
+err()   { printf "${R}[ERR]${N} %s\n" "$*" >&2; }
 hr()    { printf "${B}─────────────────────────────────────────${N}\n"; }
 
 # ─── 平台检测 ───
@@ -145,7 +145,7 @@ show_info() {
   
   # 浏览器强刷提示
   printf "\n"
-  printf "${Y}⚠️  重要：必须强刷新浏览器才能看到新前端${N}\n"
+  printf "${Y} 重要：必须强刷新浏览器才能看到新前端${N}\n"
   printf "\n"
   printf "  ${B}iPhone Safari${N}:\n"
   printf "    • 设置 → Safari → 高级 → 网站数据 → 删除 127.0.0.1\n"
