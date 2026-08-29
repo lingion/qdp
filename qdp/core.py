@@ -93,7 +93,7 @@ class QobuzDL:
         self._collection_album_cache: Dict[Tuple[str, str], dict] = {}
 
     def initialize_client(self, email, pwd, app_id, secrets, use_token, user_id, user_auth_token):
-        self.client = qopy.Client(email, pwd, app_id, secrets, use_token, user_id, user_auth_token)
+        self.client = qopy.Client(email, pwd, app_id, secrets, use_token, user_id, user_auth_token, force_proxy=self.force_proxy)
         console.print(f"[{C_TEXT}]最高画质: {QUALITIES[int(self.quality)]}[/{C_TEXT}]\n")
 
     def _build_downloader(self, item_id, base_path=None):

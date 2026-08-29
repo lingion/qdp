@@ -38,8 +38,9 @@ def _default_config_file():
     return CONFIG_FILE
 
 class Client:
-    def __init__(self, email, pwd, app_id, secrets, use_token, user_id, user_auth_token):
+    def __init__(self, email, pwd, app_id, secrets, use_token, user_id, user_auth_token, force_proxy=False):
         console.print(f"[{C_TEXT}]正在登录 API...[/{C_TEXT}]")
+        self.force_proxy = bool(force_proxy)
         self.secrets = secrets
         self.id = str(app_id)
         self.session = requests.Session()
@@ -185,7 +186,10 @@ class Client:
 
         has_proxy_pool = bool(self.proxy_list)
         if has_proxy_pool:
+            # 代理打乱后追加一次直连兜底(README 承诺); force_proxy 时禁止直连。
             attempt_queue = random.sample(self.proxy_list, len(self.proxy_list))
+            if not getattr(self, "force_proxy", False):
+                attempt_queue.append(None)
         else:
             attempt_queue = [None] * 3
 
@@ -195,7 +199,7 @@ class Client:
                 self.base = f"{current_proxy}/api.json/0.2/"
                 proxy_display = current_proxy.split("//")[-1]
             else:
-                if "qobuz.com" not in self.base and not self.proxy_list:
+                if "qobuz.com" not in self.base:
                     self.base = "https://www.qobuz.com/api.json/0.2/"
                 proxy_display = "Direct/Default"
             try:
