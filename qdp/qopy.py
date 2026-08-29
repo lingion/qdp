@@ -34,12 +34,8 @@ _PERSISTABLE_KEYS = ("app_id", "secrets")
 
 
 def _default_config_file():
-    if os.name == "nt":
-        base = os.environ.get("APPDATA") or ""
-    else:
-        base = os.path.join(os.environ.get("XDG_CONFIG_HOME")
-                            or os.path.join(os.path.expanduser("~"), ".config"))
-    return os.path.join(base, "qobuz-dl", "config.ini")
+    from qdp.accounts import CONFIG_FILE
+    return CONFIG_FILE
 
 class Client:
     def __init__(self, email, pwd, app_id, secrets, use_token, user_id, user_auth_token):

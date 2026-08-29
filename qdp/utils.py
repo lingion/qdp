@@ -36,7 +36,8 @@ def reset_proxy_cycle():
 def get_config_path():
     if os.name == "nt":
         return os.path.join(os.environ.get("APPDATA"), "qobuz-dl", "config.ini")
-    return os.path.join(os.environ["HOME"], ".config", "qobuz-dl", "config.ini")
+    xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.environ["HOME"], ".config")
+    return os.path.join(xdg, "qobuz-dl", "config.ini")
 
 
 def get_proxy_list():
