@@ -15,7 +15,7 @@ from qdp.exceptions import (
     InvalidAppSecretError,
     InvalidQuality,
 )
-from qdp.utils import get_api_base_url, get_proxy_list, fetch_web_player_credentials
+from qdp.utils import atomic_write_config, get_api_base_url, get_proxy_list, fetch_web_player_credentials
 from rich.console import Console
 
 console = Console()
@@ -136,8 +136,7 @@ class Client:
                     for key in _PERSISTABLE_KEYS:
                         config[section][key] = payload[key]
             os.makedirs(os.path.dirname(config_file) or ".", exist_ok=True)
-            with open(config_file, "w", encoding="utf-8") as fp:
-                config.write(fp)
+            atomic_write_config(config, config_file)
             console.print(f"[{C_OK}]已将新凭据保存到 {config_file}[/{C_OK}]")
             return True
         except (configparser.Error, OSError) as exc:

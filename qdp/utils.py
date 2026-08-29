@@ -40,6 +40,26 @@ def get_config_path():
     return os.path.join(xdg, "qobuz-dl", "config.ini")
 
 
+def atomic_write_config(config, config_file):
+    """原子写入 config.ini: temp 文件 + os.replace, 权限 0600。
+
+    写失败(磁盘满/异常)时原文件完整保留, 不会出现截断的半截配置。
+    """
+    import tempfile as _tempfile
+
+    os.makedirs(os.path.dirname(config_file) or ".", exist_ok=True)
+    fd, tmp_path = _tempfile.mkstemp(dir=os.path.dirname(config_file) or ".", prefix=".config-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            config.write(fp)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, config_file)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
+
+
 def get_proxy_list():
     """获取所有配置的代理列表"""
     if FORCE_DIRECT_MODE:

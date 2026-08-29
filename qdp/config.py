@@ -10,6 +10,7 @@ from rich.panel import Panel
 
 from qdp.bundle import Bundle
 from qdp.accounts import save_current_as_account
+from qdp.utils import atomic_write_config
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +97,7 @@ def load_config_defaults(config_file: str = CONFIG_FILE) -> Dict[str, str]:
 
 
 def save_config(config: configparser.ConfigParser, config_file: str = CONFIG_FILE):
-    os.makedirs(os.path.dirname(config_file), exist_ok=True)
-    with open(config_file, "w") as fp:
-        config.write(fp)
+    atomic_write_config(config, config_file)
 
 
 def _prompt_with_default(console: Console, label, default_value, secret=False):
@@ -313,9 +312,7 @@ def run_config_wizard(console: Optional[Console] = None, config_file: str = CONF
             console.print('[yellow]请在终端直接运行 `qdp -r` 完成配置。[/]')
             raise SystemExit(1)
         if choice == '1':
-            os.makedirs(os.path.dirname(config_file), exist_ok=True)
-            with open(config_file, 'w') as configfile:
-                config.write(configfile)
+            atomic_write_config(config, config_file)
             try:
                 account_name = config['DEFAULT'].get('active_account') or config['DEFAULT'].get('email') or config['DEFAULT'].get('user_id') or 'default'
                 save_current_as_account(account_name, defaults=dict(config['DEFAULT']), config_file=config_file)
