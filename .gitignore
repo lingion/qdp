@@ -8,3 +8,8 @@ build/
 .venv/
 *.apk
 *.tar.gz
+
+# runtime audio cache (web player _AUDIO_CACHE_ROOT) — never commit
+cache/
+*.part
+*.tmp
