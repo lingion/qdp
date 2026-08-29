@@ -1,8 +1,44 @@
-# qdp
+<p align="center">
+  <img src="docs/qdp-mark.svg" width="120" alt="qdp 项目标记">
+</p>
 
-qdp 是一个本地 Qobuz 工具箱：命令行/TUI 下载器加本地网页播放器。
+<h1 align="center">qdp · Qobuz 工具箱</h1>
 
-[English](README.md) | 中文
+<p align="center">
+  本地 Qobuz 工具箱：命令行/TUI 下载器 + 本地网页播放器<br>
+  A local Qobuz toolkit with a CLI/TUI downloader and a local web player
+</p>
+
+<p align="center">
+  <a href="https://github.com/lingion/qdp/releases"><img src="https://img.shields.io/github/v/release/lingion/qdp?style=flat-square&label=版本" alt="最新版本"></a>
+  <img src="https://img.shields.io/github/stars/lingion/qdp?style=flat-square&logo=github" alt="Stars">
+  <img src="https://img.shields.io/github/downloads/lingion/qdp/total?style=flat-square&label=下载量" alt="下载量">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-4c9aff?style=flat-square" alt="支持平台">
+  <img src="https://img.shields.io/badge/lang-Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/UI-CLI%20%7C%20TUI%20%7C%20Web-65d6a2?style=flat-square" alt="界面">
+  <img src="https://img.shields.io/github/license/lingion/qdp?style=flat-square&label=许可证" alt="许可证">
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> · <a href="https://github.com/lingion/qdp/releases">下载</a> · <a href="https://3d970eb7.qdp-webapp-demo.pages.dev/app/">在线演示</a>
+</p>
+
+---
+
+> **SEO 关键词：** Qobuz 下载器、Qobuz 工具箱、音乐命令行下载器、Python TUI 下载器、本地网页音乐播放器、无损音乐工作流、专辑下载、元数据下载、Qobuz downloader、music downloader CLI、local web music player
+
+---
+
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/webapp-home.jpg" width="46%" alt="qdp 网页播放器主页">
+  <img src="docs/screenshots/webapp-album.jpg" width="46%" alt="qdp 网页播放器专辑页">
+</p>
+<p align="center">
+  <img src="docs/screenshots/webapp-mobile-search.jpg" width="30%" alt="qdp 移动端网页播放器搜索">
+  <img src="docs/screenshots/tui-search.svg" width="30%" alt="qdp TUI 搜索">
+</p>
 
 ## 仓库内容
 - 命令行入口：`qdp/__main__.py` 和 `qdp/cli.py`
