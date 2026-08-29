@@ -146,7 +146,7 @@ def sync_code(qdp_dir, timeout=120):
             console.print(f"[{C_TEXT}]本地修改已恢复(stash pop)[/{C_TEXT}]")
 
     new_head = _git_rev(qdp_dir, "HEAD")
-    console.print(f"[{C_OK}]✓ 代码已同步到 {new_head[:8]}[/{C_OK}]")
+    console.print(f"[{C_OK}]代码已同步到 {new_head[:8]}[/{C_OK}]")
     return new_head
 
 
@@ -170,7 +170,7 @@ def reinstall(qdp_dir, timeout=300):
                    cwd=qdp_dir, timeout=timeout)
     if rc != 0:
         raise UpdateError(f"pip install 失败:\n{out.strip()[-500:]}")
-    console.print(f"[{C_OK}]✓ 包已重装[/{C_OK}]")
+    console.print(f"[{C_OK}]包已重装[/{C_OK}]")
 
 
 def run_update(qdp_dir=None, do_reinstall=True):

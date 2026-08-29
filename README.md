@@ -66,9 +66,9 @@ powershell -File install.ps1   # Windows PowerShell
 ```
 
 The installer automatically:
-- 🔍 Detects your platform (macOS / Linux / Windows / Termux / WSL)
-- 🐍 Finds Python 3.9+ (tries `python3`, `python`, `py` ...)
-- 📦 Clones or updates the repo from GitHub
+- Detects your platform (macOS / Linux / Windows / Termux / WSL)
+- Finds Python 3.9+ (tries `python3`, `python`, `py` ...)
+- Clones or updates the repo from GitHub
 - 📂 Creates a virtual environment (`.venv`)
 - 📥 Installs all runtime dependencies
 - ✅ Verifies the installation

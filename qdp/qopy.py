@@ -222,7 +222,7 @@ class Client:
             except (requests.exceptions.ProxyError, requests.exceptions.SSLError) as e:
                 last_error = requests.exceptions.ProxyError(f"proxy failure via {proxy_display}: {e}")
                 if has_proxy_pool:
-                    console.print(f"[{C_WARN}]⚡ 代理节点异常，切换下一节点... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
+                    console.print(f"[{C_WARN}]代理节点异常，切换下一节点... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
                 elif "search" not in epoint:
                     console.print(f"[{C_WARN}]网络异常，正在重试... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
             except requests.exceptions.Timeout as e:
@@ -232,7 +232,7 @@ class Client:
             except requests.exceptions.RequestException as e:
                 last_error = e
                 if current_proxy:
-                    console.print(f"[{C_WARN}]⚡ 节点 {proxy_display} 异常，切换下一节点... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
+                    console.print(f"[{C_WARN}]节点 {proxy_display} 异常，切换下一节点... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
                 elif "search" not in epoint:
                     console.print(f"[{C_WARN}]请求失败，正在重试... ({i+1}/{len(attempt_queue)})[/{C_WARN}]")
             if i < len(attempt_queue) - 1:

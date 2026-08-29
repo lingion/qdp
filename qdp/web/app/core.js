@@ -1947,7 +1947,7 @@ async function loadBrowseDir(dirPath){
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'browseDirItem';
-      item.innerHTML = `<span class="browseDirItemIcon">📁</span><span class="browseDirItemName">${esc(dir.name)}</span>`;
+      item.innerHTML = `<span class="browseDirItemName">${esc(dir.name)}</span>`;
       item.addEventListener('click', () => loadBrowseDir(dir.path));
       listEl.appendChild(item);
     });

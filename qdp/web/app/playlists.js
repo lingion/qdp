@@ -122,7 +122,7 @@ function playlistCoverMarkup(pl){
   if(images.length === 1){
     return `<img class="playlistThumb single" src="${esc(rewriteImg(images[0]))}" alt="" />`;
   }
-  return '<div class="playlistThumb placeholder">♪</div>';
+  return '<div class="playlistThumb placeholder"></div>';
 }
 function renderPlaylists(){
   syncSidebarSections();
