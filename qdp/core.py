@@ -347,6 +347,11 @@ class QobuzDL:
             fmt_ok = False
             fmt_msg = str(exc)
         checks.append(("命名规则", fmt_ok, fmt_msg))
+        try:
+            swept = downloader.cleanup_stale_tmp_files(self.directory)
+            checks.append(("残留临时文件", True, f"清扫 {len(swept)} 个崩溃残留 .tmp"))
+        except OSError as exc:
+            checks.append(("残留临时文件", False, str(exc)))
         scan = self.scan_library()
         incomplete_flag = scan.get("incomplete", 0) == 0
         checks.append(("本地库完整性", incomplete_flag, f"不完整记录: {scan.get('incomplete', 0)}"))
