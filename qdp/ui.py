@@ -420,7 +420,7 @@ def _ui_url_batch(console: Console, qobuz: QobuzDL):
         table.add_column("URL")
         selected_set = set(sel.selected_indices(len(items)))
         for idx, item in enumerate(items, start=1):
-            mark = "选" if (idx - 1) in selected_set else ""
+            mark = "✓" if (idx - 1) in selected_set else ""
             table.add_row(str(idx), f"[{C_OK}]{mark}[/{C_OK}]" if mark else "", item.label)
         console.print(table)
         console.print(f"[{C_DIM}]a 全选 | c 清空 | x 序号切换 | g 操作 | b 返回 | q 退出[/]")
@@ -501,7 +501,7 @@ def _ui_library_scan_results(console: Console, qobuz: QobuzDL):
         table.add_column("专辑")
         selected_set = set(sel.selected_indices(len(items)))
         for idx, item in enumerate(items, start=1):
-            mark = "选" if (idx - 1) in selected_set else ""
+            mark = "✓" if (idx - 1) in selected_set else ""
             table.add_row(str(idx), f"[{C_OK}]{mark}[/{C_OK}]" if mark else "", item.label)
         console.print(table)
         console.print(f"[{C_DIM}]a 全选 | c 清空 | x 序号切换 | g 操作 | b 返回[/]")

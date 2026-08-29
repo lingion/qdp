@@ -85,7 +85,7 @@ def interactive_search_compound(
                 if search_type == "artist"
                 else item.get("artist", {}).get("name") or item.get("performer", {}).get("name", "Unknown")
             )
-            mark = "选" if (idx - 1) in selected_set else ""
+            mark = "✓" if (idx - 1) in selected_set else ""
             row_data = [str(idx), f"[{C_OK}]{mark}[/{C_OK}]" if mark else "", title, artist]
             if search_type in ("album", "track"):
                 if not item.get("streamable"):

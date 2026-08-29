@@ -147,7 +147,7 @@ def main(argv=None):
                 return 1 if has_update else 0
             return run_update()
         except UpdateError as exc:
-            console.print(f"[#e06c75]{exc}[/#e06c75]")
+            console.print(f"[#e06c75]✗ {exc}[/#e06c75]")
             return 1
 
     initial_checks(console=console, config_file=CONFIG_FILE)
