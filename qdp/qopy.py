@@ -1,5 +1,7 @@
+import configparser
 import hashlib
 import logging
+import os
 import random
 import time
 from datetime import date
@@ -27,6 +29,18 @@ C_OK   = "#98c379"
 C_WARN = "#e5c07b"
 C_ERR  = "#e06c75"
 
+# persist_credentials 只允许写这些 key —— 账号身份字段(email/password/token)严禁触碰
+_PERSISTABLE_KEYS = ("app_id", "secrets")
+
+
+def _default_config_file():
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or ""
+    else:
+        base = os.path.join(os.environ.get("XDG_CONFIG_HOME")
+                            or os.path.join(os.path.expanduser("~"), ".config"))
+    return os.path.join(base, "qobuz-dl", "config.ini")
+
 class Client:
     def __init__(self, email, pwd, app_id, secrets, use_token, user_id, user_auth_token):
         console.print(f"[{C_TEXT}]正在登录 API...[/{C_TEXT}]")
@@ -49,39 +63,89 @@ class Client:
         self._auto_fetched_credentials = False
         
         # 对齐 QBDLX：login 前先尝试从 web player 获取最新凭据
-        self._pre_fetch_credentials()
+        self._pre_fetch_credentials(config_file=_default_config_file())
         
         self.auth(email, pwd, use_token, user_id, user_auth_token)
         self.cfg_setup()
     
-    def _pre_fetch_credentials(self):
+    def _pre_fetch_credentials(self, config_file=None):
         """QBDLX 对齐：优先从 web player bundle.js 自动获取 app_id/secret。
-        在 login 之前执行，确保 token login 使用正确的 app_id。"""
+        在 login 之前执行，确保 token login 使用正确的 app_id。
+        自动爬取成功时落盘,下次启动不再重复爬取。"""
         # 先验证 config secret 是否有效
         for secret in self.secrets:
             if secret and self.test_secret(secret):
                 self.sec = secret
                 return  # config 凭据有效
-        
+
         # config secret 失效，从 web player 自动获取
         console.print(f"[{C_WARN}]配置中的 App Secret 已失效，从 web player 自动获取...[/{C_WARN}]")
         auto_id, auto_secrets = fetch_web_player_credentials()
         if auto_id and auto_secrets:
+            # 先切到 auto app_id 再测 secret —— secret 签名依赖 X-App-Id header,
+            # 旧 app_id + 新 secret 会被 API 以 400 拒绝,导致"全部验证失败"。
+            original_id = self.id
+            if self.id != str(auto_id):
+                self.id = str(auto_id)
+                self.session.headers.update({"X-App-Id": self.id})
             # 尝试每个解码出的 secret，找到 getFileUrl 签名通过的那个
             for secret in auto_secrets:
                 if self.test_secret(secret):
                     self.sec = secret
-                    if self.id != auto_id:
-                        console.print(f"[{C_OK}]自动更新 app_id: {self.id} → {auto_id}[/{C_OK}]")
-                        self.id = auto_id
-                        self.session.headers.update({"X-App-Id": self.id})
+                    if original_id != self.id:
+                        console.print(f"[{C_OK}]自动更新 app_id: {original_id} → {auto_id}[/{C_OK}]")
                     self._auto_fetched_credentials = True
                     console.print(f"[{C_OK}]Web Player 凭据验证通过！[/{C_OK}]")
+                    # 落盘:下次启动直接命中 config 凭据,不再爬取
+                    self.persist_credentials(
+                        new_app_id=self.id,
+                        new_secrets=[self.sec],
+                        config_file=config_file,
+                    )
                     return
+            # 全部失败:还原原 app_id,按原配置兜底
+            if original_id != self.id:
+                self.id = original_id
+                self.session.headers.update({"X-App-Id": self.id})
             console.print(f"[{C_ERR}]获取到 {len(auto_secrets)} 个 secret 但均验证失败。[/{C_ERR}]")
         else:
             console.print(f"[{C_ERR}]自动获取失败。[/{C_ERR}]")
         console.print(f"[{C_ERR}]将使用配置中的值尝试。[/{C_ERR}]")
+
+    def persist_credentials(self, new_app_id, new_secrets, config_file=None):
+        """把自动获取的凭据写回 config.ini(DEFAULT + active account section)。
+
+        只写 app_id/secrets 两个 key,严禁触碰账号身份字段(email/password/token)。
+        写失败仅告警,不影响本次运行。
+        """
+        config_file = config_file or _default_config_file()
+        merged = ",".join(s for s in (new_secrets or []) if s)
+        if not str(new_app_id or "").strip() or not merged:
+            return False
+        try:
+            config = configparser.ConfigParser()
+            config.read(config_file)
+            payload = {"app_id": str(new_app_id).strip(), "secrets": merged}
+            active = ""
+            if config.has_section("DEFAULT") or "DEFAULT" in config:
+                active = config["DEFAULT"].get("active_account", "").strip()
+                config["DEFAULT"].update(payload)
+            else:
+                config["DEFAULT"].update(payload)
+            # 同步 active account section,切号/读 account 时不会回退到旧 secret
+            if active:
+                section = f"account:{active}"
+                if config.has_section(section):
+                    for key in _PERSISTABLE_KEYS:
+                        config[section][key] = payload[key]
+            os.makedirs(os.path.dirname(config_file) or ".", exist_ok=True)
+            with open(config_file, "w", encoding="utf-8") as fp:
+                config.write(fp)
+            console.print(f"[{C_OK}]已将新凭据保存到 {config_file}[/{C_OK}]")
+            return True
+        except (configparser.Error, OSError) as exc:
+            logger.warning("保存自动获取的凭据失败(不影响本次运行): %s", exc)
+            return False
 
     def api_call(self, epoint, **kwargs):
         if epoint == "catalog/search":
@@ -148,6 +212,10 @@ class Client:
                     console.print(f"[{C_OK}]登录成功！[/{C_OK}]")
                 elif epoint in ["track/getFileUrl", "favorite/getUserFavorites"] and r.status_code == 400:
                     raise InvalidAppSecretError(f"API 签名错误 (App Secret 可能已失效): {r.json()}.\n" + RESET)
+                elif r.status_code == 401 and epoint in ["track/getFileUrl", "favorite/getUserFavorites"]:
+                    # 401 + 签名端点 = 签名有效、仅缺用户 token(test_secret 场景)。
+                    # 不能 raise_for_status 吞掉 —— 直接返回,由调用方判定。
+                    return r.json()
                 r.raise_for_status()
                 return r.json()
             except (AuthenticationError, InvalidAppIdError, InvalidAppSecretError):
