@@ -4,7 +4,12 @@ Kept import-light so ``python -m qdp.web.server`` can execute without the
 package pre-importing ``qdp.web.server`` and triggering runpy warnings.
 """
 
-__version__ = "1.7.2"
+# Single version source: reuse the package version. The try/except keeps
+# the module importable when qdp/__init__.py itself imports qdp.web.
+try:
+    from qdp import __version__
+except Exception:  # pragma: no cover - circular-import safety net
+    __version__ = "0.0.0"
 
 __all__ = ["__version__", "start_web_player", "stop_web_player"]
 

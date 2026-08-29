@@ -12,7 +12,7 @@ requirements = [
 
 setup(
     name=pkg_name,
-    version="114.0.1",
+    version="114.0.1"  # keep in sync: qdp/__init__.py __version__,
     author="lingion",
     description="Local Qobuz web player and toolkit",
     url="https://github.com/lingion/qdp",
