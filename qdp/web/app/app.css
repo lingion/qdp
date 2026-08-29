@@ -603,6 +603,36 @@ img {
   min-width: 0;
 }
 
+/* 徽章样式: c4a3c0c 重写 app.css 时丢失, core.js/playlists.js 仍输出这些 class */
+.metaBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.metaBadgeSpec {
+  padding: 5px 10px;
+  border-color: rgba(99, 210, 255, 0.24);
+  background: rgba(99, 210, 255, 0.09);
+  color: #eef8ff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.metaBadgeHiRes {
+  background: linear-gradient(180deg, rgba(247, 199, 107, 0.24), rgba(247, 199, 107, 0.1));
+  border-color: rgba(247, 199, 107, 0.4);
+  color: #fff0c7;
+}
+
 .cardActions {
   display: flex;
   gap: 6px;

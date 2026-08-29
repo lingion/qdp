@@ -81,11 +81,11 @@ def test_web_player_frontend_contract():
     assert 'loadDiscoverRandom' in discover_js
     assert 'renderPlaylists' in playlists_js
 
-    # mobile drawer polish
+    # mobile drawer polish — v2.1 改版后 overlay 由 ID 样式化(#mobileSidebarOverlay)
     assert 'mobileSidebarOverlay' in index_html
-    assert '.mobileSidebarOverlay' in app_css
+    assert '#mobileSidebarOverlay' in app_css
     assert 'onMobileDrawerTouchStart' in app_js
 
-    # action sheet / menu polish styling exists
+    # download menu: v2.1 改版后选项按钮移入 modal(downloadModalQualityBtn)
     assert '.downloadMenuCard' in app_css
-    assert '.downloadMenuOption' in app_css
+    assert '.downloadModalQualityBtn' in app_css

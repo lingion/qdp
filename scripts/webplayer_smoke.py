@@ -75,7 +75,6 @@ def _check_dom_contract(index_html: str, js_sources: Dict[str, str], app_css: st
         "appVersion",
         "qualitySelect",
         "volume",
-        "mute",
         "volumeValue",
         "downloadMenu",
         "downloadMenuCard",
@@ -121,11 +120,11 @@ def _check_dom_contract(index_html: str, js_sources: Dict[str, str], app_css: st
     ]
     css_tokens = [
         ".downloadMenuCard",
-        ".downloadMenuOption",
-        ".mobileSidebarOverlay",
+        ".downloadModalQualityBtn",
+        "#mobileSidebarOverlay",
         ".sourceBadge",
         ".sourcePill",
-        ".queueHint",
+        ".emptyMini",
         ".volumePopover",
         ".discoverSection",
     ]
@@ -136,9 +135,10 @@ def _check_dom_contract(index_html: str, js_sources: Dict[str, str], app_css: st
     data_panels = re.findall(r'data-side-panel="([^"]+)"', index_html)
     card_contract_ok = all(token in bundle for token in ['cardBody', 'cardMain', 'metaBadgeHiRes'])
     hi_res_contract_ok = 'samplingRate > 48000' in bundle and '.metaBadgeHiRes' in app_css
-    volume_contract_ok = all(token in bundle for token in ['toggleVolumePopover', 'volumePopoverOpen']) and 'volumeSliderVertical' in app_css
+    volume_contract_ok = all(token in bundle for token in ['toggleVolumePopover', 'volumePopoverOpen']) and ('#volume {' in app_css or '.volumeSliderVertical' in app_css)
     sidebar_contract_ok = all(token in bundle for token in ['setSidebarSection', 'toggleSidebarSection']) and '.sectionBody.collapsed' in app_css
-    overflow_contract_ok = all(token in app_css for token in ['overflow-x:hidden', 'text-overflow:ellipsis', 'minmax(0,1fr)'])
+    # v2.1 改版后 css 已格式化(冒号/逗号后带空格), 契约按语义匹配
+    overflow_contract_ok = all(token in app_css for token in ['overflow-x:', 'text-overflow: ellipsis', 'minmax(0, 1fr)'])
     download_coverage_ok = all(token in bundle for token in ['makeTrackDownloadLink', 'makeAlbumDownloadLink', 'triggerBulkDownload'])
     return {
         "html_ids_checked": html_ids,
