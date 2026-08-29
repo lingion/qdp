@@ -1082,9 +1082,9 @@ class Download:
                 time.sleep(_backoff(attempts[category]))
         try:
             if is_mp3:
-                metadata.tag_mp3(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=False)
+                metadata.tag_mp3(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=self.embed_art)
             else:
-                metadata.tag_flac(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=False)
+                metadata.tag_flac(temp_file, root_dir, final_file, track_metadata, album_or_track_metadata, is_track, em_image=self.embed_art)
         except (MutagenError, OSError, ValueError) as exc:
             logger.warning("Tagging failed for %s: %s", final_file, exc)
         if os.path.exists(temp_file):
