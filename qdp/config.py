@@ -15,10 +15,11 @@ from qdp.utils import atomic_write_config
 logger = logging.getLogger(__name__)
 
 if os.name == "nt":
-    OS_CONFIG = os.environ.get("APPDATA")
+    OS_CONFIG = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
 else:
-    # XDG Base Directory 规范:XDG_CONFIG_HOME 未设置时才回落到 ~/.config
-    OS_CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.environ["HOME"], ".config")
+    # XDG Base Directory 规范:XDG_CONFIG_HOME 未设置时才回落到 ~/.config。
+    # HOME 用 expanduser 兜底, 避免某些 cron/容器环境未设 HOME 时 import 即崩。
+    OS_CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
 
 CONFIG_PATH = os.path.join(OS_CONFIG, "qobuz-dl")
 CONFIG_FILE = os.path.join(CONFIG_PATH, "config.ini")
