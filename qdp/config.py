@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 if os.name == "nt":
     OS_CONFIG = os.environ.get("APPDATA")
 else:
-    OS_CONFIG = os.path.join(os.environ["HOME"], ".config")
+    # XDG Base Directory 规范:XDG_CONFIG_HOME 未设置时才回落到 ~/.config
+    OS_CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.environ["HOME"], ".config")
 
 CONFIG_PATH = os.path.join(OS_CONFIG, "qobuz-dl")
 CONFIG_FILE = os.path.join(CONFIG_PATH, "config.ini")

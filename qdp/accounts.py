@@ -7,7 +7,15 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Dict, List, Mapping, Optional, Tuple
 
-CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.config', 'qobuz-dl', 'config.ini')
+def _config_file_default() -> str:
+    if os.name == 'nt':
+        base = os.environ.get('APPDATA') or os.path.expanduser('~')
+    else:
+        base = os.environ.get('XDG_CONFIG_HOME') or os.path.join(os.path.expanduser('~'), '.config')
+    return os.path.join(base, 'qobuz-dl', 'config.ini')
+
+
+CONFIG_FILE = _config_file_default()
 
 ACCOUNTS_SECTION_PREFIX = 'account:'
 ACTIVE_ACCOUNT_KEY = 'active_account'

@@ -63,7 +63,17 @@ _ENTITY_CACHE_MAX = 1024
 _AUDIO_CACHE_INFLIGHT_LOCK = threading.Lock()
 
 _DOWNLOAD_SETTINGS_LOCK = threading.Lock()
-_DOWNLOAD_SETTINGS_FILE = os.path.expanduser("~/.config/qdp/download_settings.json")
+
+
+def _download_settings_path() -> str:
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "qdp", "download_settings.json")
+
+
+_DOWNLOAD_SETTINGS_FILE = _download_settings_path()
 _DEFAULT_DOWNLOAD_PATH = os.path.expanduser("~/Music/qdp")
 _DEFAULT_DOWNLOAD_WORKERS = 3
 
