@@ -127,6 +127,8 @@ qdp -s "query"          # search all
 qdp -sa "album name"    # search albums
 qdp -st "track name"    # search tracks
 qdp "https://www.qobuz.com/album/xxxxx"  # download from URL
+qdp update              # one-click update: git sync main + pip reinstall
+qdp update --check      # check for new version only, no changes
 qdp --version            # show version (114.0.1)
 qdp --help               # show help (works without config)
 ```

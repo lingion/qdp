@@ -62,6 +62,8 @@ qdp -s "关键词"       # 搜索全部
 qdp -sa "专辑名"      # 搜索专辑
 qdp -st "曲名"        # 搜索单曲
 qdp "https://www.qobuz.com/album/xxxxx"  # 从链接下载
+qdp update             # 一键更新: git 同步 main + pip 重装
+qdp update --check     # 只检查是否有新版本,不更新
 qdp --version          # 显示版本号 (114.0.1)
 qdp --help             # 显示帮助（无需配置即可运行）
 ```
