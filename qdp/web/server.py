@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import secrets
 import ipaddress
 import json
 import logging
@@ -11,6 +12,7 @@ import os
 import posixpath
 import random
 import re
+import socket
 import threading
 import time
 import urllib.parse
@@ -52,6 +54,8 @@ _APP_CACHE_CONTROL = "no-store, no-cache, must-revalidate, max-age=0"
 _WEB_SERVER: Optional[ThreadingHTTPServer] = None
 _WEB_THREAD: Optional[threading.Thread] = None
 _WEB_URL: Optional[str] = None
+# 非 loopback 绑定时的访问 token(None = loopback 模式免认证)
+_WEB_ACCESS_TOKEN: Optional[str] = None
 
 _CLIENT_CACHE_LOCK = threading.Lock()
 _CLIENT_CACHE: Dict[str, Client] = {}
@@ -402,8 +406,24 @@ def _is_private_host(host: str) -> bool:
     try:
         addr = ipaddress.ip_address(lowered)
     except ValueError:
-        return False
-    return bool(addr.is_loopback or addr.is_private or addr.is_link_local)
+        addr = None
+    if addr is not None:
+        return bool(addr.is_loopback or addr.is_private or addr.is_link_local)
+    # 域名: 先做 DNS 解析再逐 IP 判定。
+    # 只看字面量会漏两类: 十进制/短格式 IP("2130706433"/"127.1" ip_address 解析失败
+    # 却指向 loopback), 以及解析到内网地址的域名(带外 SSRF)。
+    try:
+        infos = socket.getaddrinfo(lowered, None)
+    except (socket.gaierror, OSError, UnicodeError):
+        return True  # 解析不了的域名按不安全处理
+    for info in infos:
+        try:
+            resolved = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if resolved.is_loopback or resolved.is_private or resolved.is_link_local:
+            return True
+    return False
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -418,6 +438,20 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+def _origin_port_matches_server(origin_port: Optional[int]) -> bool:
+    """Origin 端口必须等于本 web 服务器端口(缺省 = 80/443 默认端口)。"""
+    global _WEB_SERVER
+    if origin_port is None:
+        return True  # http/https 默认端口
+    server = _WEB_SERVER
+    if server is None:
+        return False
+    try:
+        return int(origin_port) == server.server_address[1]
+    except (TypeError, ValueError, IndexError, AttributeError):
+        return False
+
+
 def _origin_is_loopback(origin: str) -> bool:
     if not origin:
         return False
@@ -427,7 +461,11 @@ def _origin_is_loopback(origin: str) -> bool:
         return False
     if parsed.scheme not in {"http", "https"}:
         return False
-    return _is_loopback_host(parsed.hostname or "")
+    if not _is_loopback_host(parsed.hostname or ""):
+        return False
+    # 只信本服务器自己的端口: 任意 http://127.0.0.1:其它端口 的网页
+    # 都在 cross-origin 位置, 不该拿到 ACAO。
+    return _origin_port_matches_server(parsed.port)
 
 
 def _client_is_loopback(client_address: object) -> bool:
@@ -803,6 +841,25 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         # keep it quiet; avoid printing secrets.
         return
 
+    def _access_token_ok(self) -> bool:
+        """LAN 模式(_WEB_ACCESS_TOKEN 非空)下校验 ?token= 或 X-QDP-Token。"""
+        if not _WEB_ACCESS_TOKEN:
+            return True
+        provided = self.headers.get("X-QDP-Token", "")
+        if not provided:
+            try:
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                provided = (qs.get("token") or [""])[0]
+            except (ValueError, AttributeError):
+                provided = ""
+        return bool(provided) and secrets.compare_digest(provided, _WEB_ACCESS_TOKEN)
+
+    def _require_access_token(self) -> bool:
+        if self._access_token_ok():
+            return True
+        self._send_api_error(HTTPStatus.UNAUTHORIZED, "token_required", "Missing or invalid access token")
+        return False
+
     def do_OPTIONS(self):
         origin = self.headers.get("Origin", "")
         if origin and not _allowed_cors_origin(origin):
@@ -816,6 +873,16 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         self._trace("POST", path)
+
+        # CSRF 防线: POST 全部是写操作(下载/清缓存/关服务器), 带第三方 Origin
+        # 的跨站请求一律拒绝。同源 fetch/XHR/form 会带同源 Origin 或不带。
+        origin = self.headers.get("Origin", "")
+        if origin and not _allowed_cors_origin(origin):
+            self._send_api_error(HTTPStatus.FORBIDDEN, "origin_not_allowed", "Cross-origin POST is not allowed")
+            return
+
+        if not self._require_access_token():
+            return
 
         if path == "/api/cache-clear":
             length = int(self.headers.get("Content-Length") or 0)
@@ -872,10 +939,15 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             logger.debug("Ignoring non-integer trace status for %s %s: %r", method, path, status)
             status_code = 0
+        # 剥掉 query: /stream?url=... / RESP 追踪会带上签名播放 URL, 不入轨迹。
+        try:
+            stripped = urllib.parse.urlparse(path).path
+        except (ValueError, AttributeError):
+            stripped = path
         item = {
             "ts": time.time(),
             "method": method,
-            "path": path,
+            "path": stripped,
             "status": status_code,
             "note": (note or "")[:200],
         }
@@ -924,6 +996,9 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         self._trace("GET", path)
+
+        if not self._require_access_token():
+            return
 
         if path == "/__version":
             self._handle_version()
@@ -2022,7 +2097,8 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
             req_headers["Range"] = rng
 
         try:
-            r = requests.get(upstream_url, headers=req_headers, stream=True, timeout=60)
+            # 禁重定向: 初始 URL 已过 SSRF 校验, 302 跳转可能甩掉校验直奔内网。
+            r = requests.get(upstream_url, headers=req_headers, stream=True, timeout=60, allow_redirects=False)
         except requests.exceptions.RequestException as exc:
             logger.warning("Stream upstream request failed for %s: %s", upstream_url, exc)
             self._send_api_error(HTTPStatus.BAD_GATEWAY, "stream_upstream_failed", f"Stream upstream error: {exc}")
@@ -2188,7 +2264,7 @@ def _find_free_port(host: str, port: int, max_tries: int = 50) -> int:
 
 def start_web_player(host: Optional[str] = None, port: Optional[int] = None) -> str:
     """Start (or reuse) local web player server. Returns base URL."""
-    global _WEB_SERVER, _WEB_THREAD, _WEB_URL
+    global _WEB_SERVER, _WEB_THREAD, _WEB_URL, _WEB_ACCESS_TOKEN
 
     if _WEB_THREAD and _WEB_THREAD.is_alive() and _WEB_URL:
         return _WEB_URL
@@ -2197,6 +2273,20 @@ def start_web_player(host: Optional[str] = None, port: Optional[int] = None) -> 
 
     bind_host, bind_port = _runtime_host_port(host, port)
     free_port = _find_free_port(bind_host, bind_port)
+
+    # 非 loopback 绑定 = LAN 模式: 全站零认证 + 任意目录写盘/全盘枚举的接口
+    # 会暴露给局域网, 必须带启动期 token。
+    _WEB_ACCESS_TOKEN = None
+    if not _is_loopback_host(bind_host):
+        _WEB_ACCESS_TOKEN = secrets.token_urlsafe(24)
+        print(
+            f"[qdp] WARNING: 绑定到非 loopback 地址 {bind_host}, 局域网内任何人可访问。\n"
+            f"[qdp] 访问 token: {_WEB_ACCESS_TOKEN}\n"
+            f"[qdp] 打开页面请用: http://{bind_host}:{free_port}/?token=<上面那串>\n"
+            f"[qdp] 或在请求头带 X-QDP-Token。不用局域网访问建议改回 127.0.0.1。",
+            flush=True,
+        )
+
     httpd = ThreadingHTTPServer((bind_host, free_port), _QDPWebHandler)
 
     t = threading.Thread(target=httpd.serve_forever, name="qdp-web", daemon=True)
