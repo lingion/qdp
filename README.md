@@ -9,7 +9,11 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
 </p>
 
+# qdp
+
 qdp is a local Qobuz toolkit: a CLI/TUI downloader plus a local web player.
+
+[中文](README.zh-CN.md) | English
 
 ## What is in this repository
 - CLI entrypoint: `qdp/__main__.py` and `qdp/cli.py`
