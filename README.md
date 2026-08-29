@@ -9,9 +9,7 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
 </p>
 
-qdp is a local Qobuz toolkit with an existing CLI/TUI downloader workflow and a local web player runtime.
-
-Sprint 1 establishes the delivery baseline by documenting scope, backup rules, runnable commands, and packaging metadata.
+qdp is a local Qobuz toolkit: a CLI/TUI downloader plus a local web player.
 
 ## What is in this repository
 - CLI entrypoint: `qdp/__main__.py` and `qdp/cli.py`
