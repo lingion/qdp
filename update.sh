@@ -68,9 +68,16 @@ backup_config() {
 sync_code() {
   log "拉最新 main commit…"
   cd "$QDP_DIR"
-  
+
+  # timeout 在 macOS 默认不存在(coreutils 才有), 缺失时直接跑 git fetch 不带超时
+  if command -v timeout >/dev/null 2>&1; then
+    run_fetch() { timeout 15 git fetch origin main; }
+  else
+    run_fetch() { git fetch origin main; }
+  fi
+
   # 1. 先试 git fetch（如果能跑通就用）
-  if timeout 15 git fetch origin main 2>/dev/null; then
+  if run_fetch 2>/dev/null; then
     log "git fetch 成功，merge…"
     if ! git merge origin/main --ff-only 2>&1 | tail -5; then
       warn "git merge 失败（可能有本地未提交修改），改用 gh api 拉文件"
@@ -79,7 +86,7 @@ sync_code() {
       return
     fi
   else
-    warn "git fetch 超时，改用 gh api 拉文件"
+    warn "git fetch 失败/超时，改用 gh api 拉文件"
   fi
   
   # 2. 用 gh api 拉 4 个核心前端文件（绕过 HTTPS 直连超时）
