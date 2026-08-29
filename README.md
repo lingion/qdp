@@ -1,19 +1,44 @@
 <p align="center">
-  <a href="https://github.com/lingion/qdp/stargazers"><img src="https://img.shields.io/github/stars/lingion/qdp?style=for-the-badge&logo=github&color=FFD700" alt="Stars"></a>
-  <a href="https://github.com/lingion/qdp/network/members"><img src="https://img.shields.io/github/forks/lingion/qdp?style=for-the-badge&logo=github&color=8B5CF6" alt="Forks"></a>
-  <a href="https://github.com/lingion/qdp/issues"><img src="https://img.shields.io/github/issues/lingion/qdp?style=for-the-badge&logo=github&color=EF4444" alt="Issues"></a>
-  <a href="https://github.com/lingion/qdp/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lingion/qdp?style=for-the-badge&logo=github&color=10B981" alt="License"></a>
-  <br>
-  <a href="https://github.com/lingion/qdp/commits/main"><img src="https://img.shields.io/github/last-commit/lingion/qdp?style=flat-square" alt="Last commit"></a>
-  <a href="https://www.qobuz.com/"><img src="https://img.shields.io/badge/Qobuz-Mod-1ABD6F?style=flat-square" alt="Qobuz"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
+  <img src="docs/qdp-mark.svg" width="120" alt="qdp project mark">
 </p>
 
-# qdp
+<h1 align="center">qdp · Qobuz Toolkit</h1>
 
-qdp is a local Qobuz toolkit: a CLI/TUI downloader plus a local web player.
+<p align="center">
+  A local Qobuz toolkit with a CLI/TUI downloader and a local web player.<br>
+  本地 Qobuz 工具箱：命令行/TUI 下载器 + 本地网页播放器
+</p>
 
-[中文](README.zh-CN.md) | English
+<p align="center">
+  <a href="https://github.com/lingion/qdp/releases"><img src="https://img.shields.io/github/v/release/lingion/qdp?style=flat-square&label=version" alt="Latest Release"></a>
+  <img src="https://img.shields.io/github/stars/lingion/qdp?style=flat-square&logo=github" alt="Stars">
+  <img src="https://img.shields.io/github/downloads/lingion/qdp/total?style=flat-square&label=downloads" alt="Downloads">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-4c9aff?style=flat-square" alt="Platforms">
+  <img src="https://img.shields.io/badge/lang-Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/UI-CLI%20%7C%20TUI%20%7C%20Web-65d6a2?style=flat-square" alt="Interfaces">
+  <img src="https://img.shields.io/github/license/lingion/qdp?style=flat-square&label=license" alt="License">
+</p>
+
+<p align="center">
+  <a href="README.zh-CN.md">中文</a> · <a href="https://github.com/lingion/qdp/releases">Download</a> · <a href="https://3d970eb7.qdp-webapp-demo.pages.dev/app/">Live demo</a>
+</p>
+
+---
+
+> **Keywords (SEO):** Qobuz downloader, Qobuz toolkit, music downloader CLI, Python TUI downloader, local web music player, lossless music workflow, album downloader, metadata downloader, 命令行下载器, 音乐下载, 本地音乐播放器, 开源音乐工具
+
+---
+
+## Preview
+
+<p align="center">
+  <img src="docs/screenshots/webapp-home.jpg" width="46%" alt="qdp web player home">
+  <img src="docs/screenshots/webapp-album.jpg" width="46%" alt="qdp web player album view">
+</p>
+<p align="center">
+  <img src="docs/screenshots/webapp-mobile-search.jpg" width="30%" alt="qdp mobile web player search">
+  <img src="docs/screenshots/tui-search.svg" width="30%" alt="qdp TUI search">
+</p>
 
 ## What is in this repository
 - CLI entrypoint: `qdp/__main__.py` and `qdp/cli.py`

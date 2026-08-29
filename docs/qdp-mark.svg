@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">qdp mark</title>
+  <desc id="desc">An abstract geometric qdp mark, created for this project.</desc>
+  <rect width="160" height="160" rx="36" fill="#172033"/>
+  <path d="M48 48h39c17 0 29 12 29 29v6c0 17-12 29-29 29H73l-18 18v-18h-7c-17 0-29-12-29-29v-6c0-17 12-29 29-29Z" fill="#65d6a2"/>
+  <path d="M55 69h31c7 0 12 5 12 12v1c0 7-5 12-12 12H55c-7 0-12-5-12-12v-1c0-7 5-12 12-12Z" fill="#172033"/>
+  <circle cx="103" cy="116" r="10" fill="#65d6a2"/>
+</svg>
