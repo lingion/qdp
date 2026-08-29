@@ -282,6 +282,7 @@ def inspect_album_integrity(
     downloads_db: Optional[str] = None,
     repair_db: bool = False,
     legacy_formats: Sequence[str] = LEGACY_TRACK_FORMATS,
+    write_db: bool = True,
 ) -> IntegrityReport:
     sidecar = load_sidecar(album_dir)
     expected_tracks = build_expected_tracks(meta, current_track_format, legacy_formats=legacy_formats, sidecar=sidecar)
@@ -340,7 +341,7 @@ def inspect_album_integrity(
     db_repaired = False
     if db_stale and repair_db and downloads_db:
         db_repaired = remove_download_id(downloads_db, album_id)
-    if downloads_db:
+    if downloads_db and write_db:
         upsert_download_entry(
             downloads_db,
             album_id,
