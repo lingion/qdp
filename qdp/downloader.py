@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -374,6 +375,20 @@ class Download:
             return "proxy"
         if isinstance(exc, PermissionError) or "permission" in message or "read-only" in message:
             return "io"
+        if isinstance(exc, requests.exceptions.HTTPError):
+            status = None
+            if exc.response is not None:
+                status = exc.response.status_code
+            else:
+                m = re.search(r"\b(\d{3})\b", str(exc))
+                if m:
+                    status = int(m.group(1))
+            # 401 走 auth; 429 限流保持可重试; 其余 4xx 是永久错误, 重试无意义。
+            if status == 401:
+                return "auth"
+            if status is not None and 400 <= status < 500 and status != 429:
+                return "http"
+            return "network"
         if isinstance(exc, requests.exceptions.RequestException) or "timeout" in message or "connection" in message:
             return "network"
         if "token" in message or "auth" in message or "401" in message or "app secret" in message or "app id" in message:
@@ -505,6 +520,12 @@ class Download:
             logger.warning("Failed to prepare album %s: %s", album_id, exc)
             return {"status": "invalid", "reason": str(exc), "album_id": album_id}
 
+    def _split_failed_entries(self, failed_list):
+        """按异常类别分栏: copyright(试听)进 invalid, 其余进 failed。"""
+        invalid_entries = [entry for entry in failed_list if entry.get("category") == "copyright"]
+        hard_entries = [entry for entry in failed_list if entry.get("category") != "copyright"]
+        return len(invalid_entries), len(hard_entries)
+
     def _process_single_track(self, item, count, total_items, meta, dirn, is_multiple, progress, overall_task_id, failed_list, ind_cover, track_fmt):
         if not item:
             progress.update(overall_task_id, advance=1)
@@ -521,7 +542,7 @@ class Download:
                 self._process_real_track(item, count, total_items, meta, dirn, is_multiple, progress, task_id, ind_cover, track_fmt)
         except Exception as exc:
             album_name = item.get("album", {}).get("title") or (meta or {}).get("title") or "Unknown Album"
-            failed_list.append({"item": item, "error": str(exc), "album": album_name, "path": item.get("_manual_dir", dirn), "label": make_track_label(item)})
+            failed_list.append({"item": item, "error": str(exc), "category": self._classify_retryable_error(exc), "album": album_name, "path": item.get("_manual_dir", dirn), "label": make_track_label(item)})
             logger.warning("Track failed: %s (%s)", display_title, exc)
             progress.console.print(f"[{C_ERR}]失败 {display_name}: {exc}[/{C_ERR}]")
         finally:
@@ -908,10 +929,7 @@ class Download:
             if attempt < max_attempts - 1:
                 time.sleep(2)
         stats["success"] = len(succeeded_ids)
-        invalid_errors = [entry for entry in failed_list if "试听" in entry["error"] or "无效" in entry["error"]]
-        hard_failures = [entry for entry in failed_list if entry not in invalid_errors]
-        stats["invalid"] = len(invalid_errors)
-        stats["failed"] = len(hard_failures)
+        stats["invalid"], stats["failed"] = self._split_failed_entries(failed_list)
         console.print(f"[{C_DIM}]结果统计: 成功 {stats['success']} / 失败 {stats['failed']} / 跳过 {stats['skipped']} / 无效 {stats['invalid']}[/{C_DIM}]")
         return stats
 
