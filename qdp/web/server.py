@@ -426,6 +426,29 @@ def _is_private_host(host: str) -> bool:
     return False
 
 
+_ALLOWED_IMAGE_SUFFIXES = ("qobuz.com", "qobuzcdn.com")
+
+
+def _is_allowed_image_host(target_url: str) -> bool:
+    """image-proxy 白名单: 按解析出的 hostname 后缀判定。
+
+    子串匹配有形近绕过("evil.com/?qobuz.com"/"qobuzcdn.evil.com");
+    这里先取 hostname(userinfo "@" 截断在 urlparse.hostname 里天然处理),
+    再做精确后缀匹配。
+    """
+    try:
+        parsed = urllib.parse.urlparse(target_url)
+        hostname = (parsed.hostname or "").strip().strip("[]").lower()
+    except ValueError:
+        return False
+    if not hostname:
+        return False
+    return any(
+        hostname == suffix or hostname.endswith("." + suffix)
+        for suffix in _ALLOWED_IMAGE_SUFFIXES
+    )
+
+
 def _is_loopback_host(host: str) -> bool:
     parsed = urllib.parse.urlparse(host if "://" in host else f"http://{host}")
     hostname = (parsed.hostname or host or "").strip().strip("[]")
@@ -1093,8 +1116,9 @@ class _QDPWebHandler(BaseHTTPRequestHandler):
         if not target_url:
             self._send_api_error(400, "missing_url", "Missing url parameter")
             return
-        # Only allow qobuz image domains
-        if "qobuz.com" not in target_url and "qobuzcdn" not in target_url:
+        # Only allow qobuz image domains: match on the parsed hostname, never
+        # on substrings of the raw URL ("evil.com/?qobuz.com" must not pass).
+        if not _is_allowed_image_host(target_url):
             self._send_api_error(403, "forbidden_domain", "Only qobuz images allowed")
             return
         try:
